@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { ReadBar, TimeBar } from "@/components/Countdown";
 import { CheckBadge, CrossBadge, OptionBadge, optionBg } from "@/components/options";
+import { QuestionImage } from "@/components/QuestionImage";
 import { Button, ErrorBanner, FullPageSpinner, Spinner, TONE_BG, Tag, buttonClass, type Tone } from "@/components/ui";
 import { api, errorCode } from "@/lib/client/api";
 import { useHydrated, useServerNow } from "@/lib/client/hooks";
@@ -33,10 +34,21 @@ function PlayGate({ pin }: { pin: string }) {
 }
 
 /** Full-bleed coloured stage: the whole phone turns into one big sticker colour. */
-function Stage({ tone = "white", children, center = true }: { tone?: Tone; children: React.ReactNode; center?: boolean }) {
+function Stage({
+  tone = "white",
+  children,
+  center = true,
+  tight = false,
+}: {
+  tone?: Tone;
+  children: React.ReactNode;
+  center?: boolean;
+  /** Smaller gaps, for screens that also show a question picture. */
+  tight?: boolean;
+}) {
   return (
     <div
-      className={`flex flex-1 flex-col gap-5 p-5 ${TONE_BG[tone]} ${center ? "items-center justify-center text-center" : ""}`}
+      className={`flex flex-1 flex-col ${tight ? "gap-3 p-4" : "gap-5 p-5"} ${TONE_BG[tone]} ${center ? "items-center justify-center text-center" : ""}`}
     >
       {children}
     </div>
@@ -193,6 +205,8 @@ function QuestionPhase({
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lifted so an enlarged picture stays open when reading time ends and answering starts.
+  const [zoomed, setZoomed] = useState(false);
 
   const startedAt = view.startedAt ?? 0;
   const limitMs = question.timeLimitSec * 1000;
@@ -221,16 +235,27 @@ function QuestionPhase({
   }
 
   if (reading) {
+    const readBar = <ReadBar remainingMs={startedAt - now} totalMs={READ_TIME_MS} />;
     return (
-      <Stage tone="lilac">
+      <Stage tone="lilac" tight={Boolean(question.imageUrl)}>
         <QuestionTags view={view} question={question} />
         <p className="font-display text-lg font-extrabold">{t("play.getReady")}</p>
         <h1 className="sticker animate-pop bg-white p-5 text-2xl font-extrabold leading-snug" style={{ ["--tilt" as string]: "-1deg" }}>
           {question.prompt}
         </h1>
-        <div className="w-full max-w-xs">
-          <ReadBar remainingMs={startedAt - now} totalMs={READ_TIME_MS} />
-        </div>
+        {/* Show the picture already while reading: players get a head start on studying it. */}
+        {question.imageUrl && (
+          <QuestionImage
+            src={question.imageUrl}
+            aspect
+            className="w-full"
+            style={{ maxHeight: "max(8rem, min(45dvh, 100dvh - 24rem))" }}
+            zoomed={zoomed}
+            onZoomedChange={setZoomed}
+            zoomHeader={readBar}
+          />
+        )}
+        <div className="w-full max-w-xs">{readBar}</div>
       </Stage>
     );
   }
@@ -258,20 +283,35 @@ function QuestionPhase({
     );
   }
 
+  const timeBar = <TimeBar remainingMs={remaining} totalMs={limitMs} />;
   return (
-    <Stage center={false}>
-      <TimeBar remainingMs={remaining} totalMs={limitMs} />
-      <QuestionTags view={view} question={question} />
+    <Stage center={false} tight={Boolean(question.imageUrl)}>
+      {question.imageUrl ? (
+        // One row for tags + timer: every pixel of height goes to the picture.
+        <div className="flex items-center gap-3">
+          <QuestionTags view={view} question={question} />
+          <div className="min-w-0 flex-1">{timeBar}</div>
+        </div>
+      ) : (
+        <>
+          {timeBar}
+          <QuestionTags view={view} question={question} />
+        </>
+      )}
       <h1 className="text-xl font-extrabold leading-snug">{question.prompt}</h1>
       {question.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        // Full width; the height cap leaves room for the header, prompt and two rows of answers.
+        <QuestionImage
           src={question.imageUrl}
-          alt=""
-          className="mx-auto max-h-36 rounded-xl border-3 border-ink object-contain shadow-hard-sm"
+          aspect
+          className="w-full shrink-0"
+          style={{ maxHeight: "max(10rem, min(50dvh, 100dvh - 24rem))" }}
+          zoomed={zoomed}
+          onZoomedChange={setZoomed}
+          zoomHeader={timeBar}
         />
       )}
-      <AnswerPad question={question} disabled={sending} onSubmit={submit} />
+      <AnswerPad question={question} disabled={sending} onSubmit={submit} compact={Boolean(question.imageUrl)} />
       <ErrorBanner>{errorText(error)}</ErrorBanner>
     </Stage>
   );
@@ -281,10 +321,13 @@ function AnswerPad({
   question,
   disabled,
   onSubmit,
+  compact = false,
 }: {
   question: PublicQuestion;
   disabled: boolean;
   onSubmit: (answer: SubmittedAnswer) => void;
+  /** Shorter buttons (icon beside the label) so a question picture gets the room. */
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<string[]>([]);
@@ -326,6 +369,7 @@ function AnswerPad({
         {question.options.map((o, i) => {
           const isSelected = selected.includes(o.id);
           const label = question.type === "true_false" ? t(o.id === "true" ? "tf.true" : "tf.false") : o.text;
+          const labelSize = !compact ? "text-lg" : label.length <= 12 ? "text-xl" : "text-base";
           return (
             <button
               key={o.id}
@@ -333,10 +377,10 @@ function AnswerPad({
               disabled={disabled}
               onClick={() => (multi ? toggle(o.id) : onSubmit({ optionIds: [o.id] }))}
               aria-pressed={multi ? isSelected : undefined}
-              className={`press relative flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border-3 border-ink p-3 text-center font-display font-extrabold shadow-hard disabled:opacity-60 ${optionBg(i, question.type, o.id)} ${multi && selected.length > 0 && !isSelected ? "opacity-55" : ""} ${multi && isSelected ? "-translate-y-1 shadow-hard-lg" : ""}`}
+              className={`press relative flex items-center justify-center rounded-2xl border-3 border-ink font-display font-extrabold shadow-hard disabled:opacity-60 ${compact ? "min-h-18 flex-row gap-2.5 p-2.5 text-left" : "min-h-28 flex-col gap-2 p-3 text-center"} ${optionBg(i, question.type, o.id)} ${multi && selected.length > 0 && !isSelected ? "opacity-55" : ""} ${multi && isSelected ? "-translate-y-1 shadow-hard-lg" : ""}`}
             >
-              <OptionBadge index={i} type={question.type} optionId={o.id} />
-              <span className="line-clamp-3 text-lg leading-tight">{label}</span>
+              <OptionBadge index={i} type={question.type} optionId={o.id} size={compact ? "sm" : "md"} />
+              <span className={`line-clamp-3 leading-tight ${labelSize}`}>{label}</span>
               {multi && isSelected && (
                 <span className="absolute -right-2 -top-2 flex size-8 items-center justify-center rounded-full border-3 border-ink bg-white">
                   <CheckBadge className="size-4" />

@@ -16,6 +16,9 @@ export const en: Messages = {
     back: "Back",
     points: "pts",
     confirm: "OK",
+    close: "Close",
+    zoomImage: "Enlarge image",
+    rotateHint: "Turn your phone sideways or pinch to see it bigger.",
   },
   lang: {
     switchTo: "Tiếng Việt",

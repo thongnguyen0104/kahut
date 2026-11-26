@@ -201,7 +201,9 @@ function HostGame({ session }: { session: HostSession }) {
         {view.status === "lobby" && (
           <HostLobby view={view} joinUrl={joinUrl} onlineIds={game.onlineIds} onKick={kick} />
         )}
-        {view.status === "question" && question && <HostQuestion view={view} question={question} now={now} />}
+        {view.status === "question" && question && (
+          <HostQuestion key={view.questionIndex} view={view} question={question} now={now} />
+        )}
         {view.status === "reveal" && question && <HostReveal view={view} question={question} />}
         {view.status === "leaderboard" && <HostLeaderboard view={view} />}
         {view.status === "finished" && <HostPodium view={view} />}

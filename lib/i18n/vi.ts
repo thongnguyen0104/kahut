@@ -14,6 +14,9 @@ export const vi = {
     back: "Quay lại",
     points: "điểm",
     confirm: "Đồng ý",
+    close: "Đóng",
+    zoomImage: "Phóng to ảnh",
+    rotateHint: "Xoay ngang điện thoại hoặc dùng hai ngón tay để xem lớn hơn.",
   },
   lang: {
     switchTo: "English",
