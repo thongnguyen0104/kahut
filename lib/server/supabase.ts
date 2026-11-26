@@ -1,13 +1,14 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { IMAGE_BUCKET, MAX_PLAYERS_DEFAULT } from "../config";
+import { normalizeSupabaseUrl } from "../supabaseUrl";
 
 let admin: SupabaseClient | null = null;
 
 /** Service-role client. Bypasses RLS: only ever use it on the server. */
 export function getAdminClient(): SupabaseClient {
   if (!admin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const url = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) {
       throw new Error(
@@ -23,8 +24,8 @@ export function getAdminClient(): SupabaseClient {
 
 /** Only images from our own bucket are accepted in quizzes. */
 export function imageUrlPrefix(): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  return `${url.replace(/\/$/, "")}/storage/v1/object/public/${IMAGE_BUCKET}/`;
+  const url = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  return `${url}/storage/v1/object/public/${IMAGE_BUCKET}/`;
 }
 
 export function maxPlayers(): number {

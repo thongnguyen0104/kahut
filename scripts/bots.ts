@@ -9,6 +9,7 @@
  */
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 import type { GameView, PublicQuestion, QuizContent } from "../lib/game/types";
+import { normalizeSupabaseUrl } from "../lib/supabaseUrl";
 
 try {
   process.loadEnvFile(".env.local");
@@ -26,7 +27,7 @@ const PLAYERS = Number(arg("players", "30"));
 const GIVEN_PIN = arg("pin", "");
 const MIN_DELAY = Number(arg("min-delay", "500"));
 const MAX_DELAY = Number(arg("max-delay", "6000"));
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_URL = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 if (!SUPABASE_URL || !ANON_KEY) {

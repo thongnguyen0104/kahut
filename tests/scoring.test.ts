@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computePoints, isAnswerCorrect, parseSubmittedAnswer } from "@/lib/game/scoring";
 import { normalizeText } from "@/lib/game/normalize";
+import { normalizeSupabaseUrl } from "@/lib/supabaseUrl";
 import type { Question } from "@/lib/game/types";
 
 const base = { id: "q1", prompt: "?", imageUrl: null, timeLimitSec: 20, pointsMultiplier: 1 };
@@ -52,6 +53,19 @@ describe("normalizeText", () => {
   });
   it("keeps inner punctuation", () => {
     expect(normalizeText("3.14")).toBe("3.14");
+  });
+});
+
+describe("normalizeSupabaseUrl", () => {
+  it("strips API paths, slashes, quotes and spaces", () => {
+    const bare = "https://abc.supabase.co";
+    expect(normalizeSupabaseUrl(bare)).toBe(bare);
+    expect(normalizeSupabaseUrl(`${bare}/`)).toBe(bare);
+    expect(normalizeSupabaseUrl(`${bare}/rest/v1/`)).toBe(bare);
+    expect(normalizeSupabaseUrl(`${bare}/rest/v1`)).toBe(bare);
+    expect(normalizeSupabaseUrl(` "${bare}/" `)).toBe(bare);
+    expect(normalizeSupabaseUrl("http://127.0.0.1:54321")).toBe("http://127.0.0.1:54321");
+    expect(normalizeSupabaseUrl(undefined)).toBe("");
   });
 });
 
