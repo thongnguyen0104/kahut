@@ -30,6 +30,7 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/quizzes/[id]">) 
           title: content.title,
           description: content.description,
           cover_image_url: content.coverImageUrl,
+          music_url: content.musicUrl ?? null,
           questions: content.questions,
           updated_at: new Date().toISOString(),
         })

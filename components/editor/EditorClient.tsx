@@ -11,6 +11,7 @@ import { LIMITS } from "@/lib/config";
 import type { Question, Quiz, QuizContent } from "@/lib/game/types";
 import { findQuizProblems, type QuizProblem } from "@/lib/game/validate";
 import { useErrorText, useI18n } from "@/lib/i18n/I18nProvider";
+import { AudioField } from "./AudioField";
 import { ImageField } from "./ImageField";
 import { QuestionEditor, TYPE_TONE, newQuestion, randomId } from "./QuestionEditor";
 
@@ -54,6 +55,7 @@ function Editor({ id }: { id: string }) {
           title: loaded.title,
           description: loaded.description,
           coverImageUrl: loaded.coverImageUrl,
+          musicUrl: loaded.musicUrl ?? null,
           questions: loaded.questions.length ? loaded.questions : [newQuestion()],
         };
         setQuiz(content);
@@ -257,7 +259,10 @@ function Editor({ id }: { id: string }) {
                   {i + 1}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{t(`qtype.${q.type}`)}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+                    {t(`qtype.${q.type}`)}
+                    {q.audioUrl && <span title={t("editor.questionAudio")}> · ♪</span>}
+                  </span>
                   <span className="line-clamp-2 text-sm font-semibold leading-snug">
                     {q.prompt || <span className="text-ink/40">{t("editor.emptyPrompt")}</span>}
                   </span>
@@ -314,6 +319,15 @@ function Editor({ id }: { id: string }) {
                   onChange={(coverImageUrl) => update((q) => ({ ...q, coverImageUrl }))}
                   quizId={id}
                   compact
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>♪ {t("editor.music")}</span>
+                <p className="text-sm font-medium text-ink-soft">{t("editor.musicHint")}</p>
+                <AudioField
+                  value={quiz.musicUrl ?? null}
+                  onChange={(musicUrl) => update((q) => ({ ...q, musicUrl }))}
+                  quizId={id}
                 />
               </div>
             </Card>

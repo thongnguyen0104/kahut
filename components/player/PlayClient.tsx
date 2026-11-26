@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { ReadBar, TimeBar } from "@/components/Countdown";
+import { SoundToggle, useGameMusic } from "@/components/GameMusic";
 import { CheckBadge, CrossBadge, OptionBadge, optionBg } from "@/components/options";
 import { QuestionImage } from "@/components/QuestionImage";
 import { Button, ErrorBanner, FullPageSpinner, Spinner, TONE_BG, Tag, buttonClass, type Tone } from "@/components/ui";
@@ -72,6 +73,8 @@ function PlayGame({ session }: { session: PlayerSession }) {
   const game = useGame(session.pin, { token: session.playerToken, presenceKey: session.playerId });
   const { view, source, refresh } = game;
   const me = view?.players.find((p) => p.id === session.playerId) ?? null;
+  const now = useServerNow(250, view?.status === "question");
+  const music = useGameMusic(view, now);
 
   // A broadcast built just before we joined may not list us yet: double-check.
   const missingFromBroadcast = Boolean(view && !me && source === "broadcast");
@@ -120,6 +123,7 @@ function PlayGame({ session }: { session: PlayerSession }) {
           <span className="truncate font-display text-lg font-extrabold">{session.nickname}</span>
         </div>
         <div className="flex items-center gap-3">
+          <SoundToggle music={music} />
           {!game.connected && (
             <span className="flex items-center gap-1 text-xs font-bold">
               <Spinner className="size-3.5" />

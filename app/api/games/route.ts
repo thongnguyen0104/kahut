@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       title: quiz.title,
       description: quiz.description,
       coverImageUrl: quiz.coverImageUrl,
+      musicUrl: quiz.musicUrl ?? null,
       questions: quiz.questions,
     };
 

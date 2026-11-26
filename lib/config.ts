@@ -43,3 +43,7 @@ export const IMAGE_MIME_TYPES = [
   "image/webp",
   "image/gif",
 ] as const;
+
+/** Background music and per-question clips (.mp3), stored in the same bucket as images. */
+export const AUDIO_MAX_BYTES = 8 * 1024 * 1024;
+export const AUDIO_MIME_TYPE = "audio/mpeg";

@@ -6,6 +6,7 @@ import { LIMITS, TIME_LIMIT_OPTIONS } from "@/lib/config";
 import { QUESTION_TYPES, type Question, type QuestionType } from "@/lib/game/types";
 import { trueFalseOptions } from "@/lib/game/validate";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { AudioField } from "./AudioField";
 import { ImageField } from "./ImageField";
 
 export function randomId(): string {
@@ -23,6 +24,7 @@ export function newQuestion(type: QuestionType = "single"): Question {
       type: "single",
       prompt: "",
       imageUrl: null,
+      audioUrl: null,
       timeLimitSec: 20,
       pointsMultiplier: 1,
       options: blankOptions(4),
@@ -171,6 +173,9 @@ export function QuestionEditor({
         <div className="flex flex-col gap-2.5">
           <span className={labelClass}>{t("editor.image")}</span>
           <ImageField value={q.imageUrl} onChange={(imageUrl) => set({ imageUrl })} quizId={quizId} />
+          <span className={`mt-3 ${labelClass}`}>♪ {t("editor.questionAudio")}</span>
+          <p className="-mt-1 text-sm font-medium text-ink-soft">{t("editor.questionAudioHint")}</p>
+          <AudioField value={q.audioUrl ?? null} onChange={(audioUrl) => set({ audioUrl })} quizId={quizId} />
         </div>
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2.5">

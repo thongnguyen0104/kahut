@@ -11,11 +11,17 @@ function shortId(value: unknown, fallback: string): string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(value) ? value : fallback;
 }
 
-function imageUrl(value: unknown, allowedPrefix: string | null): string | null {
-  if (typeof value !== "string" || !value) return null;
+/** A file URL from our own storage bucket (when a prefix is given), else null. */
+function storageUrl(value: unknown, allowedPrefix: string | null): string | null {
+  if (typeof value !== "string" || !value || value.length > 500) return null;
   if (allowedPrefix && !value.startsWith(allowedPrefix)) return null;
   if (!/^https?:\/\//.test(value)) return null;
-  return value.slice(0, 500);
+  return value;
+}
+
+function audioUrl(value: unknown, allowedPrefix: string | null): string | null {
+  const url = storageUrl(value, allowedPrefix);
+  return url && /\.mp3$/i.test(url) ? url : null;
 }
 
 export function trueFalseOptions(correct: "true" | "false" | null): AnswerOption[] {
@@ -85,7 +91,8 @@ function sanitizeQuestion(raw: unknown, index: number, prefix: string | null): Q
     id: shortId(q.id, `q${index}`),
     type,
     prompt: str(q.prompt, LIMITS.promptMax),
-    imageUrl: imageUrl(q.imageUrl, prefix),
+    imageUrl: storageUrl(q.imageUrl, prefix),
+    audioUrl: audioUrl(q.audioUrl, prefix),
     timeLimitSec,
     pointsMultiplier,
     options,
@@ -116,7 +123,8 @@ export function sanitizeQuiz(raw: unknown, imageUrlPrefix: string | null): QuizC
   return {
     title: str(body.title, LIMITS.titleMax),
     description: str(body.description, LIMITS.descriptionMax),
-    coverImageUrl: imageUrl(body.coverImageUrl, imageUrlPrefix),
+    coverImageUrl: storageUrl(body.coverImageUrl, imageUrlPrefix),
+    musicUrl: audioUrl(body.musicUrl, imageUrlPrefix),
     questions,
   };
 }

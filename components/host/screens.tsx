@@ -284,6 +284,15 @@ export function HostQuestion({ view, question, now }: { view: GameView; question
       <PromptCard question={question} />
       <div className="flex min-h-0 flex-1 items-center justify-between gap-6">
         <CountdownRing remainingMs={remainingMs} totalMs={limitMs} size={150} />
+        {question.audioUrl && (
+          // A listening question: show that the music is the clue.
+          <span
+            aria-hidden
+            className="animate-wiggle flex size-36 items-center justify-center rounded-full border-3 border-ink bg-mint font-display text-7xl font-extrabold shadow-hard-lg"
+          >
+            ♪
+          </span>
+        )}
         <AnsweredCount view={view} />
       </div>
       {question.type === "text" ? <TypingHint /> : <OptionTiles question={question} />}

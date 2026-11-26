@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SoundToggle, useGameMusic } from "@/components/GameMusic";
 import { Button, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Spinner, buttonClass } from "@/components/ui";
 import { api, errorCode } from "@/lib/client/api";
 import { authApi, useAuth } from "@/lib/client/auth";
@@ -86,6 +87,7 @@ function HostGame({ session }: { session: HostSession }) {
   const everyoneAnswered = Boolean(
     view && view.players.length > 0 && view.answeredPlayerIds.length >= view.players.length,
   );
+  const music = useGameMusic(view, now);
   const shouldReveal =
     deadline !== null && view?.startedAt != null && now >= view.startedAt && (now >= deadline || everyoneAnswered);
   const revealedIndex = useRef(-1);
@@ -185,6 +187,7 @@ function HostGame({ session }: { session: HostSession }) {
         </div>
         <div className="flex items-center gap-2">
           {!game.connected && <Spinner className="size-5" />}
+          <SoundToggle music={music} />
           <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
             ⛶ {t("host.fullscreen")}
           </Button>

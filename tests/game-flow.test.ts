@@ -98,6 +98,26 @@ describe("sanitizeQuiz / findQuizProblems", () => {
     ]);
   });
 
+  it("keeps only .mp3 music from our own storage", () => {
+    const prefix = "https://x.supabase.co/storage/v1/object/public/quiz-images/";
+    const quiz = sanitizeQuiz(
+      {
+        title: "Nhạc",
+        musicUrl: `${prefix}q1/bg.mp3`,
+        questions: [
+          { type: "single", prompt: "a", audioUrl: `${prefix}q1/clip.MP3` },
+          { type: "single", prompt: "b", audioUrl: "https://evil.example/clip.mp3" },
+          { type: "single", prompt: "c", audioUrl: `${prefix}q1/not-audio.png` },
+          { type: "single", prompt: "d" },
+        ],
+      },
+      prefix,
+    )!;
+    expect(quiz.musicUrl).toBe(`${prefix}q1/bg.mp3`);
+    expect(quiz.questions.map((q) => q.audioUrl)).toEqual([`${prefix}q1/clip.MP3`, null, null, null]);
+    expect(sanitizeQuiz({ questions: [], musicUrl: "https://evil.example/a.mp3" }, prefix)!.musicUrl).toBeNull();
+  });
+
   it("returns null for non-quiz payloads", () => {
     expect(sanitizeQuiz(null, null)).toBeNull();
     expect(sanitizeQuiz({ title: "x" }, null)).toBeNull();
@@ -206,6 +226,23 @@ describe("buildGameView", () => {
     const view = buildGameView({ ...game, status: "lobby", current_question_index: -1 }, players, [], 0);
     expect(view.question).toBeNull();
     expect(view.totalQuestions).toBe(1);
+  });
+
+  it("exposes music, and old snapshots without audio fields stay silent", () => {
+    expect(buildGameView(game, players, answers, 0)).toMatchObject({ musicUrl: null, hasAudio: false });
+    expect(buildGameView(game, players, answers, 0).question?.audioUrl).toBeNull();
+
+    const clip = "https://x/clip.mp3";
+    const withClip: GameRow = {
+      ...game,
+      quiz_snapshot: { ...game.quiz_snapshot, questions: [{ ...game.quiz_snapshot.questions[0], audioUrl: clip }] },
+    };
+    const view = buildGameView(withClip, players, answers, 0);
+    expect(view.hasAudio).toBe(true);
+    expect(view.question?.audioUrl).toBe(clip);
+
+    const withMusic = { ...game, quiz_snapshot: { ...game.quiz_snapshot, musicUrl: "https://x/bg.mp3" } };
+    expect(buildGameView(withMusic, players, [], 0)).toMatchObject({ musicUrl: "https://x/bg.mp3", hasAudio: true });
   });
 });
 

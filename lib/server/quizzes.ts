@@ -9,6 +9,7 @@ export interface QuizRow {
   title: string;
   description: string;
   cover_image_url: string | null;
+  music_url: string | null;
   questions: Quiz["questions"];
   owner_id: string | null;
   owner_email: string | null;
@@ -16,7 +17,7 @@ export interface QuizRow {
 }
 
 export const QUIZ_COLUMNS =
-  "id,title,description,cover_image_url,questions,owner_id,owner_email,updated_at";
+  "id,title,description,cover_image_url,music_url,questions,owner_id,owner_email,updated_at";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -45,6 +46,7 @@ export function rowToQuiz(row: QuizRow): Quiz {
     title: row.title,
     description: row.description,
     coverImageUrl: row.cover_image_url,
+    musicUrl: row.music_url,
     questions: row.questions,
     updatedAt: row.updated_at,
   };

@@ -4,6 +4,10 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
 
 - 4 loại câu hỏi: một đáp án, Đúng/Sai, nhiều đáp án, gõ đáp án. Câu gõ đáp án không phân biệt hoa/thường và dấu tiếng Việt.
 - Ảnh cho câu hỏi và ảnh bìa (tự nén WebP ≤1280px trước khi upload), 24 avatar vẽ sẵn.
+- Nhạc .mp3 (≤8MB):
+  - Mỗi quiz có thể có một bài nhạc nền, lặp lại ở phòng chờ và trong lúc trả lời.
+  - Mỗi câu hỏi có thể có nhạc riêng, phát thay nhạc nền từ lúc mở trả lời (hợp với câu kiểu "nghe nhạc đoán bài").
+  - Nhạc phát trên màn hình host và trên điện thoại người chơi. Mỗi máy có nút tắt/bật tiếng.
 - **Tài khoản:** chỉ tài khoản đã đăng nhập mới tạo và sửa được quiz, và chỉ sửa được quiz của mình. **Superadmin** xem được mọi quiz và cấp, xóa tài khoản, đặt lại mật khẩu ở `/admin/users`. Không có tự đăng ký. Người chơi **không cần tài khoản**, chỉ cần mã PIN.
 - Giao diện song ngữ Việt/Anh.
 
@@ -96,6 +100,7 @@ Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok":
 ## Lưu ý vận hành
 
 - Project Supabase gói free **tự tạm dừng sau 7 ngày không hoạt động**. Mở dashboard để bật lại trước buổi chơi.
+- Nhạc tải xuống từng máy: 30 người chơi × file 4MB ≈ 120MB mỗi bài nhạc trong một ván. Gói free Supabase có giới hạn băng thông tải xuống mỗi tháng, nên dùng file nhỏ (128kbps, đoạn ngắn).
 - Realtime cần bật *Allow public access* (mặc định đã bật) trong Supabase → Realtime → Settings, vì kênh game là kênh public.
 - `SUPABASE_SERVICE_ROLE_KEY` là khóa bí mật: chỉ đặt ở server/Vercel, không bao giờ thêm tiền tố `NEXT_PUBLIC_`.
 - Xóa một tài khoản không xóa quiz của tài khoản đó. Quiz còn lại và chỉ superadmin xem được (hiện là "Người tạo").

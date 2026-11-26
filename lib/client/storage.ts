@@ -42,3 +42,7 @@ export const clearPlayerSession = (pin: string) => write(`player:${pin}`, null);
 
 export const getHostSession = (pin: string) => read<HostSession>(`host:${pin}`);
 export const saveHostSession = (s: HostSession) => write(`host:${s.pin}`, s);
+
+/** Per-device sound preference for game music. */
+export const getSoundMuted = () => read<boolean>("sound:muted") === true;
+export const setSoundMuted = (muted: boolean) => write("sound:muted", muted ? true : null);

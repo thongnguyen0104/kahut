@@ -12,6 +12,8 @@ export interface Question {
   type: QuestionType;
   prompt: string;
   imageUrl: string | null;
+  /** .mp3 played instead of the background music while this question is answered. */
+  audioUrl?: string | null;
   timeLimitSec: number;
   /** 0 = no points, 1 = standard, 2 = double. */
   pointsMultiplier: number;
@@ -25,6 +27,8 @@ export interface QuizContent {
   title: string;
   description: string;
   coverImageUrl: string | null;
+  /** Looping .mp3 for the lobby and for questions without their own clip. */
+  musicUrl?: string | null;
   questions: Question[];
 }
 
@@ -39,6 +43,7 @@ export interface PublicQuestion {
   type: QuestionType;
   prompt: string;
   imageUrl: string | null;
+  audioUrl: string | null;
   timeLimitSec: number;
   pointsMultiplier: number;
   options: { id: string; text: string }[];
@@ -88,6 +93,9 @@ export interface GameView {
   status: GameStatus;
   quizTitle: string;
   coverImageUrl: string | null;
+  musicUrl: string | null;
+  /** True when the quiz has background music or any question clip (shows the sound toggle). */
+  hasAudio: boolean;
   totalQuestions: number;
   /** -1 while in the lobby. */
   questionIndex: number;
