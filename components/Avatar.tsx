@@ -111,12 +111,21 @@ export function Avatar({ id, size = 48, className = "" }: { id: string; size?: n
       className={`shrink-0 rounded-full ${className}`}
       aria-hidden
     >
-      <circle cx="50" cy="50" r="50" fill={p.bg} />
-      <Extra kind={p.extra} color={p.body} />
-      <Body shape={p.shape} color={p.body} />
-      <ellipse cx="40" cy="40" rx="9" ry="5" fill="#fff" opacity="0.25" />
+      <defs>
+        <clipPath id={`clip-${id}`}>
+          <circle cx="50" cy="50" r="46" />
+        </clipPath>
+      </defs>
+      <circle cx="50" cy="50" r="46" fill={p.bg} />
+      <g clipPath={`url(#clip-${id})`}>
+        <Extra kind={p.extra} color={p.body} />
+        <Body shape={p.shape} color={p.body} />
+      </g>
+      <ellipse cx="40" cy="40" rx="9" ry="5" fill="#fff" opacity="0.3" />
       <Eyes kind={p.eyes} />
       <Mouth kind={p.mouth} />
+      {/* Sticker outline */}
+      <circle cx="50" cy="50" r="46" fill="none" stroke="#17130f" strokeWidth="6" />
     </svg>
   );
 }

@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Spinner, buttonClass } from "@/components/ui";
 import { api, errorCode } from "@/lib/client/api";
+import { authApi, useAuth } from "@/lib/client/auth";
 import { useHydrated, useServerNow } from "@/lib/client/hooks";
-import { getHostSession, getQuizToken, saveHostSession, type HostSession } from "@/lib/client/storage";
+import { getHostSession, saveHostSession, type HostSession } from "@/lib/client/storage";
 import { useGame } from "@/lib/client/useGame";
 import type { HostAction } from "@/lib/game/transitions";
 import type { GameView, PlayerView } from "@/lib/game/types";
@@ -26,11 +27,13 @@ function HostGate({ pin }: { pin: string }) {
   if (!session) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-xl font-bold">{t("host.noAccess", { pin })}</p>
-        <p className="text-white/60">{t("host.noAccessHint")}</p>
-        <Link href="/my-quizzes" className={buttonClass("secondary")}>
-          {t("home.myQuizzes")}
-        </Link>
+        <div className="sticker flex max-w-md flex-col items-center gap-3 bg-white p-6">
+          <p className="font-display text-2xl font-extrabold">{t("host.noAccess", { pin })}</p>
+          <p className="font-medium text-ink-soft">{t("host.noAccessHint")}</p>
+          <Link href="/my-quizzes" className={buttonClass("dark")}>
+            {t("home.myQuizzes")}
+          </Link>
+        </div>
       </div>
     );
   }
@@ -41,6 +44,7 @@ function HostGame({ session }: { session: HostSession }) {
   const { t } = useI18n();
   const errorText = useErrorText();
   const router = useRouter();
+  const signedIn = Boolean(useAuth().user);
   const game = useGame(session.pin, { token: session.hostToken });
   const { view, applyView } = game;
   const [busy, setBusy] = useState(false);
@@ -110,16 +114,10 @@ function HostGame({ session }: { session: HostSession }) {
   }
 
   async function playAgain() {
-    const editToken = getQuizToken(session.quizId);
-    if (!editToken) {
-      router.push(`/my-quizzes`);
-      return;
-    }
     setBusy(true);
     try {
-      const res = await api<{ pin: string; hostToken: string }>("/api/games", {
+      const res = await authApi<{ pin: string; hostToken: string }>("/api/games", {
         method: "POST",
-        token: editToken,
         body: { quizId: session.quizId },
       });
       saveHostSession({ pin: res.pin, hostToken: res.hostToken, quizId: session.quizId });
@@ -149,7 +147,6 @@ function HostGame({ session }: { session: HostSession }) {
   }
 
   const hasNext = view.questionIndex + 1 < view.totalQuestions;
-  const editToken = getQuizToken(session.quizId);
 
   let primary: { label: string; onClick: () => void; disabled?: boolean } | null = null;
   switch (view.status) {
@@ -171,29 +168,29 @@ function HostGame({ session }: { session: HostSession }) {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col gap-4 p-4 lg:p-6">
+    <div className="flex min-h-dvh flex-col gap-5 p-4 lg:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Logo className="text-xl" />
           {view.status !== "lobby" && (
-            <span className="rounded-lg bg-white/10 px-3 py-1 font-black tabular-nums">
+            <span className="rounded-lg border-3 border-ink bg-white px-3 py-0.5 font-display text-lg font-extrabold tabular-nums shadow-hard-sm">
               PIN {formatPin(view.pin)}
             </span>
           )}
           {view.question && view.status !== "finished" && (
-            <span className="font-bold text-white/70">
+            <span className="rounded-lg border-3 border-ink bg-lilac px-3 py-0.5 font-display text-lg font-extrabold shadow-hard-sm">
               {view.questionIndex + 1}/{view.totalQuestions}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!game.connected && <Spinner className="size-5 text-amber-300" />}
+          {!game.connected && <Spinner className="size-5" />}
           <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
-            {t("host.fullscreen")}
+            ⛶ {t("host.fullscreen")}
           </Button>
           <LanguageToggle />
           {view.status !== "finished" && (
-            <Button variant="ghost" size="sm" onClick={endGame}>
+            <Button variant="danger" size="sm" onClick={endGame}>
               {t("host.endGame")}
             </Button>
           )}
@@ -214,25 +211,20 @@ function HostGame({ session }: { session: HostSession }) {
         <div className="mr-auto">
           <ErrorBanner>{errorText(error)}</ErrorBanner>
         </div>
-        {view.status === "finished" && (
+        {view.status === "finished" && signedIn && (
           <>
-            {editToken && (
-              <Link
-                href={`/quiz/${session.quizId}/edit?k=${encodeURIComponent(editToken)}`}
-                className={buttonClass("secondary", "lg")}
-              >
-                {t("host.backToEditor")}
-              </Link>
-            )}
+            <Link href={`/quiz/${session.quizId}/edit`} className={buttonClass("secondary", "lg")}>
+              {t("host.backToEditor")}
+            </Link>
             <Button size="lg" onClick={() => void playAgain()} disabled={busy}>
-              {t("host.playAgain")}
+              ↻ {t("host.playAgain")}
             </Button>
           </>
         )}
         {primary && (
-          <Button size="xl" onClick={primary.onClick} disabled={busy || primary.disabled}>
+          <Button size="xl" onClick={primary.onClick} disabled={busy || primary.disabled} className="min-w-56">
             {busy && <Spinner className="size-6" />}
-            {primary.label}
+            {primary.label} →
           </Button>
         )}
       </footer>

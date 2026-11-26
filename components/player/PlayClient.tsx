@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
-import { CountdownRing, ReadBar } from "@/components/Countdown";
-import { CheckBadge, CrossBadge, OptionIcon, optionBg } from "@/components/options";
-import { Button, ErrorBanner, FullPageSpinner, Spinner, buttonClass, inputClass } from "@/components/ui";
+import { ReadBar, TimeBar } from "@/components/Countdown";
+import { CheckBadge, CrossBadge, OptionBadge, optionBg } from "@/components/options";
+import { Button, ErrorBanner, FullPageSpinner, Spinner, TONE_BG, Tag, buttonClass, type Tone } from "@/components/ui";
 import { api, errorCode } from "@/lib/client/api";
 import { useHydrated, useServerNow } from "@/lib/client/hooks";
 import { clearPlayerSession, getPlayerSession, type PlayerSession } from "@/lib/client/storage";
@@ -32,6 +32,28 @@ function PlayGate({ pin }: { pin: string }) {
   return <PlayGame session={session} />;
 }
 
+/** Full-bleed coloured stage: the whole phone turns into one big sticker colour. */
+function Stage({ tone = "white", children, center = true }: { tone?: Tone; children: React.ReactNode; center?: boolean }) {
+  return (
+    <div
+      className={`flex flex-1 flex-col gap-5 p-5 ${TONE_BG[tone]} ${center ? "items-center justify-center text-center" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Big rotated result stamp. */
+function Stamp({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <div
+      className={`animate-stamp flex size-28 items-center justify-center rounded-full border-3 border-ink shadow-hard-lg ${TONE_BG[tone]}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function PlayGame({ session }: { session: PlayerSession }) {
   const { t } = useI18n();
   const errorText = useErrorText();
@@ -52,24 +74,27 @@ function PlayGame({ session }: { session: PlayerSession }) {
 
   if (kicked) {
     return (
-      <Centered>
-        <p className="text-xl font-bold">{t("play.kicked")}</p>
-        <Link href="/" className={buttonClass("secondary")} onClick={() => clearPlayerSession(session.pin)}>
+      <Stage tone="paper">
+        <Stamp tone="tomato">
+          <CrossBadge className="size-14" />
+        </Stamp>
+        <p className="font-display text-2xl font-extrabold">{t("play.kicked")}</p>
+        <Link href="/" className={buttonClass("dark")} onClick={() => clearPlayerSession(session.pin)}>
           {t("play.otherRoom")}
         </Link>
-      </Centered>
+      </Stage>
     );
   }
 
   if (!view) {
     if (game.error) {
       return (
-        <Centered>
+        <Stage>
           <ErrorBanner>{errorText(game.error)}</ErrorBanner>
           <Button variant="secondary" onClick={() => void refresh()}>
             {t("common.retry")}
           </Button>
-        </Centered>
+        </Stage>
       );
     }
     return <FullPageSpinner />;
@@ -77,32 +102,26 @@ function PlayGame({ session }: { session: PlayerSession }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-between gap-3 bg-black/20 px-4 py-2.5">
+      <header className="flex items-center justify-between gap-3 border-b-3 border-ink bg-white px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Avatar id={session.avatar} size={36} />
-          <span className="truncate font-extrabold">{session.nickname}</span>
+          <Avatar id={session.avatar} size={38} />
+          <span className="truncate font-display text-lg font-extrabold">{session.nickname}</span>
         </div>
         <div className="flex items-center gap-3">
           {!game.connected && (
-            <span className="flex items-center gap-1 text-xs font-bold text-amber-300">
+            <span className="flex items-center gap-1 text-xs font-bold">
               <Spinner className="size-3.5" />
               {t("play.reconnecting")}
             </span>
           )}
-          <span className="rounded-lg bg-white/10 px-3 py-1 font-black tabular-nums">{me?.score ?? 0}</span>
+          <span className="rounded-lg border-3 border-ink bg-sun px-3 py-0.5 font-display text-lg font-extrabold tabular-nums shadow-hard-sm">
+            {me?.score ?? 0}
+          </span>
         </div>
       </header>
-      <main className="flex flex-1 flex-col p-4">
+      <main className="flex flex-1 flex-col">
         <PlayScreen view={view} me={me} session={session} />
       </main>
-    </div>
-  );
-}
-
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center animate-rise">
-      {children}
     </div>
   );
 }
@@ -113,12 +132,20 @@ function PlayScreen({ view, me, session }: { view: GameView; me: PlayerView | nu
   switch (view.status) {
     case "lobby":
       return (
-        <Centered>
-          <Avatar id={session.avatar} size={112} className="animate-pop" />
-          <h1 className="text-3xl font-black">{t("play.waitingTitle")}</h1>
-          <p className="max-w-xs text-white/70">{t("play.waitingHint")}</p>
-          <p className="text-sm text-white/50">{view.quizTitle}</p>
-        </Centered>
+        <Stage>
+          <div className="animate-pop" style={{ ["--tilt" as string]: "-6deg" }}>
+            <Avatar id={session.avatar} size={140} />
+          </div>
+          <span
+            className="rounded-xl border-3 border-ink bg-sun px-4 py-1 font-display text-2xl font-extrabold shadow-hard-sm"
+            style={{ transform: "rotate(2deg)" }}
+          >
+            {session.nickname}
+          </span>
+          <h1 className="text-4xl font-extrabold">{t("play.waitingTitle")}</h1>
+          <p className="max-w-xs font-medium text-ink-soft">{t("play.waitingHint")}</p>
+          <Tag tone="lilac">{view.quizTitle}</Tag>
+        </Stage>
       );
     case "question":
       return view.question ? (
@@ -132,13 +159,21 @@ function PlayScreen({ view, me, session }: { view: GameView; me: PlayerView | nu
   }
 }
 
-function QuestionHeader({ view, question }: { view: GameView; question: PublicQuestion }) {
+function QuestionTags({ view, question }: { view: GameView; question: PublicQuestion }) {
   const { t } = useI18n();
   return (
-    <div className="flex items-center justify-between text-sm font-bold text-white/70">
-      <span>{t("play.questionOf", { current: view.questionIndex + 1, total: view.totalQuestions })}</span>
-      {question.pointsMultiplier === 2 && <span className="text-accent">{t("play.doublePoints")}</span>}
-      {question.pointsMultiplier === 0 && <span>{t("play.noPoints")}</span>}
+    <div className="flex flex-wrap items-center gap-2">
+      <Tag tone="white">{t("play.questionOf", { current: view.questionIndex + 1, total: view.totalQuestions })}</Tag>
+      {question.pointsMultiplier === 2 && (
+        <Tag tone="sun" tilt={3}>
+          {t("play.doublePoints")}
+        </Tag>
+      )}
+      {question.pointsMultiplier === 0 && (
+        <Tag tone="paper" tilt={3}>
+          {t("play.noPoints")}
+        </Tag>
+      )}
     </div>
   );
 }
@@ -187,56 +222,58 @@ function QuestionPhase({
 
   if (reading) {
     return (
-      <div className="flex flex-1 flex-col gap-6">
-        <QuestionHeader view={view} question={question} />
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
-          <p className="text-lg font-bold text-accent">{t("play.getReady")}</p>
-          <h1 className="text-2xl font-black leading-snug animate-pop">{question.prompt}</h1>
-          <div className="w-full max-w-xs">
-            <ReadBar remainingMs={startedAt - now} totalMs={READ_TIME_MS} />
-          </div>
+      <Stage tone="lilac">
+        <QuestionTags view={view} question={question} />
+        <p className="font-display text-lg font-extrabold">{t("play.getReady")}</p>
+        <h1 className="sticker animate-pop bg-white p-5 text-2xl font-extrabold leading-snug" style={{ ["--tilt" as string]: "-1deg" }}>
+          {question.prompt}
+        </h1>
+        <div className="w-full max-w-xs">
+          <ReadBar remainingMs={startedAt - now} totalMs={READ_TIME_MS} />
         </div>
-      </div>
+      </Stage>
     );
   }
 
   if (answered) {
     return (
-      <Centered>
-        <div className="flex size-20 items-center justify-center rounded-full bg-accent text-ink animate-pop">
-          <CheckBadge className="size-10" />
-        </div>
-        <h2 className="text-2xl font-black">{t("play.submitted")}</h2>
-        <p className="text-white/70 animate-pulse-soft">{t("play.waitingOthers")}</p>
-      </Centered>
+      <Stage tone="sky">
+        <Stamp tone="white">
+          <CheckBadge className="size-14" />
+        </Stamp>
+        <h2 className="text-3xl font-extrabold">{t("play.submitted")}</h2>
+        <p className="animate-pulse-soft font-semibold">{t("play.waitingOthers")}</p>
+      </Stage>
     );
   }
 
   if (remaining <= 0) {
     return (
-      <Centered>
-        <h2 className="text-3xl font-black">{t("play.timeUp")}</h2>
+      <Stage tone="paper">
+        <h2 className="animate-stamp rounded-2xl border-3 border-ink bg-white px-6 py-3 text-4xl font-extrabold shadow-hard">
+          {t("play.timeUp")}
+        </h2>
         <ErrorBanner>{errorText(error)}</ErrorBanner>
-      </Centered>
+      </Stage>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <QuestionHeader view={view} question={question} />
-          <h1 className="text-lg font-extrabold leading-snug">{question.prompt}</h1>
-        </div>
-        <CountdownRing remainingMs={remaining} totalMs={limitMs} size={64} />
-      </div>
+    <Stage center={false}>
+      <TimeBar remainingMs={remaining} totalMs={limitMs} />
+      <QuestionTags view={view} question={question} />
+      <h1 className="text-xl font-extrabold leading-snug">{question.prompt}</h1>
       {question.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={question.imageUrl} alt="" className="mx-auto max-h-36 rounded-xl object-contain" />
+        <img
+          src={question.imageUrl}
+          alt=""
+          className="mx-auto max-h-36 rounded-xl border-3 border-ink object-contain shadow-hard-sm"
+        />
       )}
       <AnswerPad question={question} disabled={sending} onSubmit={submit} />
       <ErrorBanner>{errorText(error)}</ErrorBanner>
-    </div>
+    </Stage>
   );
 }
 
@@ -269,9 +306,9 @@ function AnswerPad({
           autoFocus
           autoComplete="off"
           placeholder={t("play.typeAnswer")}
-          className={`${inputClass} h-16 text-center text-xl font-bold`}
+          className="h-16 w-full rounded-2xl border-3 border-ink bg-white px-4 text-center font-display text-2xl font-extrabold outline-none shadow-hard-sm placeholder:text-ink/30"
         />
-        <Button type="submit" size="lg" disabled={disabled || !text.trim()}>
+        <Button type="submit" size="xl" variant="dark" disabled={disabled || !text.trim()}>
           {t("play.submit")}
         </Button>
       </form>
@@ -284,7 +321,7 @@ function AnswerPad({
 
   return (
     <div className="mt-auto flex flex-1 flex-col gap-3">
-      {multi && <p className="text-center text-sm font-bold text-white/70">{t("play.selectAll")}</p>}
+      {multi && <p className="text-center text-sm font-bold">{t("play.selectAll")}</p>}
       <div className={`grid flex-1 gap-3 ${question.options.length > 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
         {question.options.map((o, i) => {
           const isSelected = selected.includes(o.id);
@@ -296,12 +333,12 @@ function AnswerPad({
               disabled={disabled}
               onClick={() => (multi ? toggle(o.id) : onSubmit({ optionIds: [o.id] }))}
               aria-pressed={multi ? isSelected : undefined}
-              className={`${optionBg(i, question.type, o.id)} relative flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl p-3 text-center font-extrabold shadow-[0_5px_0_0_rgb(0_0_0/0.3)] transition active:translate-y-1 active:shadow-none disabled:opacity-60 ${multi && isSelected ? "ring-4 ring-white" : ""} ${multi && selected.length > 0 && !isSelected ? "opacity-60" : ""}`}
+              className={`press relative flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border-3 border-ink p-3 text-center font-display font-extrabold shadow-hard disabled:opacity-60 ${optionBg(i, question.type, o.id)} ${multi && selected.length > 0 && !isSelected ? "opacity-55" : ""} ${multi && isSelected ? "-translate-y-1 shadow-hard-lg" : ""}`}
             >
-              <OptionIcon index={i} type={question.type} optionId={o.id} className="size-8" />
-              <span className="line-clamp-3 text-base leading-tight">{label}</span>
+              <OptionBadge index={i} type={question.type} optionId={o.id} />
+              <span className="line-clamp-3 text-lg leading-tight">{label}</span>
               {multi && isSelected && (
-                <span className="absolute right-2 top-2 rounded-full bg-white p-0.5 text-ink">
+                <span className="absolute -right-2 -top-2 flex size-8 items-center justify-center rounded-full border-3 border-ink bg-white">
                   <CheckBadge className="size-4" />
                 </span>
               )}
@@ -310,7 +347,7 @@ function AnswerPad({
         })}
       </div>
       {multi && (
-        <Button size="lg" disabled={disabled || selected.length === 0} onClick={() => onSubmit({ optionIds: selected })}>
+        <Button size="xl" variant="dark" disabled={disabled || selected.length === 0} onClick={() => onSubmit({ optionIds: selected })}>
           {t("play.submit")}
         </Button>
       )}
@@ -324,39 +361,46 @@ function ResultPhase({ view, me, playerId }: { view: GameView; me: PlayerView | 
 
   if (view.status === "leaderboard") {
     return (
-      <Centered>
-        <p className="text-white/70">{t("play.lookUp")}</p>
-        {me && <p className="text-4xl font-black">{t("play.rank", { rank: me.rank, total: view.players.length })}</p>}
-        {me && <p className="text-xl font-bold text-white/80">{t("play.total", { score: me.score })}</p>}
-      </Centered>
+      <Stage tone="sun">
+        <p className="font-semibold">{t("play.lookUp")}</p>
+        {me && (
+          <p className="rounded-2xl border-3 border-ink bg-white px-6 py-3 font-display text-5xl font-extrabold shadow-hard">
+            #{me.rank}
+            <span className="text-2xl text-ink-soft"> / {view.players.length}</span>
+          </p>
+        )}
+        {me && <p className="font-display text-xl font-extrabold">{t("play.total", { score: me.score })}</p>}
+      </Stage>
     );
   }
 
+  const answered = Boolean(result?.answered);
   const correct = Boolean(result?.correct);
+  const tone: Tone = !answered ? "paper" : correct ? "mint" : "tomato";
+
   return (
-    <div
-      className={`-m-4 flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center ${result?.answered ? (correct ? "bg-good/25" : "bg-bad/25") : ""}`}
-    >
-      <div
-        className={`flex size-24 items-center justify-center rounded-full animate-pop ${correct ? "bg-good" : "bg-bad"}`}
-      >
-        {correct ? <CheckBadge className="size-12" /> : <CrossBadge className="size-12" />}
-      </div>
-      <h1 className="text-3xl font-black">
-        {!result?.answered ? t("play.noAnswer") : correct ? t("play.correct") : t("play.incorrect")}
+    <Stage tone={tone}>
+      <Stamp tone={correct ? "white" : answered ? "white" : "paper"}>
+        {correct ? <CheckBadge className="size-14" /> : <CrossBadge className="size-14" />}
+      </Stamp>
+      <h1 className="text-4xl font-extrabold">
+        {!answered ? t("play.noAnswer") : correct ? t("play.correct") : t("play.incorrect")}
       </h1>
       {correct && result && result.points > 0 && (
-        <p className="rounded-xl bg-black/25 px-4 py-2 text-2xl font-black text-accent animate-rise">
+        <p
+          className="animate-pop rounded-xl border-3 border-ink bg-sun px-5 py-2 font-display text-3xl font-extrabold shadow-hard"
+          style={{ ["--tilt" as string]: "-3deg" }}
+        >
           {t("play.gained", { points: result.points })}
         </p>
       )}
-      {me && me.streak >= 2 && <p className="font-bold">{t("play.streak", { count: me.streak })}</p>}
+      {me && me.streak >= 2 && <Tag tone="white">{t("play.streak", { count: me.streak })}</Tag>}
       {me && (
-        <p className="text-lg font-bold text-white/80">
+        <p className="font-display text-lg font-extrabold">
           {t("play.rank", { rank: me.rank, total: view.players.length })} · {t("play.total", { score: me.score })}
         </p>
       )}
-    </div>
+    </Stage>
   );
 }
 
@@ -364,15 +408,19 @@ function FinalPhase({ view, me }: { view: GameView; me: PlayerView | null }) {
   const { t } = useI18n();
   const podium = me && me.rank <= 3 ? t(`play.podium${me.rank}` as "play.podium1") : null;
   return (
-    <Centered>
-      <p className="text-lg font-bold text-white/70">{t("play.gameOver")}</p>
-      {podium && <p className="text-4xl font-black text-accent animate-pop">{podium}</p>}
-      {me && <h1 className="text-3xl font-black">{t("play.finalRank", { rank: me.rank })}</h1>}
-      {me && <p className="text-xl font-bold">{t("play.total", { score: me.score })}</p>}
-      <p className="text-sm text-white/50">{view.quizTitle}</p>
-      <Link href="/" className={buttonClass("secondary")}>
+    <Stage tone={podium ? "sun" : "lilac"}>
+      <Tag tone="white">{t("play.gameOver")}</Tag>
+      {podium && (
+        <p className="animate-stamp rounded-2xl border-3 border-ink bg-white px-5 py-2 font-display text-4xl font-extrabold shadow-hard">
+          {podium}
+        </p>
+      )}
+      {me && <h1 className="text-4xl font-extrabold">{t("play.finalRank", { rank: me.rank })}</h1>}
+      {me && <p className="font-display text-xl font-extrabold">{t("play.total", { score: me.score })}</p>}
+      <p className="text-sm font-semibold">{view.quizTitle}</p>
+      <Link href="/" className={buttonClass("dark", "lg")}>
         {t("play.otherRoom")}
       </Link>
-    </Centered>
+    </Stage>
   );
 }

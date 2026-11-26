@@ -1,18 +1,20 @@
 import { findQuizProblems } from "@/lib/game/validate";
-import { HttpError, bearerToken, handle, json, readJson } from "@/lib/server/http";
-import { getEditableQuiz, rowToQuiz } from "@/lib/server/quizzes";
+import { requireUser } from "@/lib/server/auth";
+import { HttpError, handle, json, readJson } from "@/lib/server/http";
+import { getOwnedQuiz, rowToQuiz } from "@/lib/server/quizzes";
 import { getAdminClient } from "@/lib/server/supabase";
 import { generatePin, generateToken, hashToken } from "@/lib/tokens";
 
 const STALE_GAME_HOURS = 12;
 
-/** Starts a new game room for a quiz (needs the quiz edit token). */
+/** Starts a new game room for a quiz the signed-in account owns. */
 export async function POST(req: Request) {
   return handle(async () => {
+    const user = await requireUser(req);
     const { quizId } = await readJson(req);
     if (typeof quizId !== "string") throw new HttpError(400, "bad_request");
 
-    const quiz = rowToQuiz(await getEditableQuiz(quizId, bearerToken(req)));
+    const quiz = rowToQuiz(await getOwnedQuiz(quizId, user));
     if (findQuizProblems(quiz).length > 0) throw new HttpError(422, "quiz_not_playable");
 
     const db = getAdminClient();

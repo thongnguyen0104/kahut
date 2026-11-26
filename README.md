@@ -4,7 +4,7 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
 
 - 4 loại câu hỏi: một đáp án, Đúng/Sai, nhiều đáp án, gõ đáp án. Câu gõ đáp án không phân biệt hoa/thường và dấu tiếng Việt.
 - Ảnh cho câu hỏi và ảnh bìa (tự nén WebP ≤1280px trước khi upload), 24 avatar vẽ sẵn.
-- Không cần đăng nhập: mỗi quiz có một **link quản lý bí mật**.
+- **Tài khoản:** chỉ tài khoản đã đăng nhập mới tạo và sửa được quiz, và chỉ sửa được quiz của mình. **Superadmin** xem được mọi quiz và cấp, xóa tài khoản, đặt lại mật khẩu ở `/admin/users`. Không có tự đăng ký. Người chơi **không cần tài khoản**, chỉ cần mã PIN.
 - Giao diện song ngữ Việt/Anh.
 
 ## Kiến trúc
@@ -13,8 +13,11 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
 |---|---|
 | Web + API | Next.js 16 (App Router) trên **Vercel** |
 | Database | **Supabase Postgres** (RLS bật, chỉ server truy cập bằng service role) |
+| Tài khoản | **Supabase Auth** (email + mật khẩu). Vai trò lưu ở `app_metadata.role` (`user` / `superadmin`) |
 | Realtime | **Supabase Realtime Broadcast + Presence** (kênh `game:{pin}`) |
 | Ảnh | **Supabase Storage**, bucket public `quiz-images`, upload qua signed URL |
+
+Trình duyệt giữ phiên đăng nhập Supabase và gửi access token tới API (`Authorization: Bearer`). Server xác minh token với Supabase Auth trên mỗi request rồi mới kiểm tra quyền sở hữu quiz và vai trò.
 
 Vercel không giữ được WebSocket lâu dài, nên mọi thay đổi trạng thái đi qua API route (server tính giờ và tính điểm). Server phát sự kiện qua REST broadcast của Supabase; trình duyệt chỉ **nghe**. Đáp án đúng không gửi xuống client trước khi lật đáp án. Khi refresh hoặc mất mạng, client gọi `GET /api/games/[pin]/state` để đồng bộ lại.
 
@@ -49,10 +52,13 @@ npx supabase db push
 
 Key lấy ở *Project Settings → API*: `anon`/publishable cho `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `service_role`/secret cho `SUPABASE_SERVICE_ROLE_KEY`.
 
-**Hoặc Supabase local (Docker):** `npm run db:start`, rồi copy `API URL`, `anon key`, `service_role key` vào `.env.local`. Migration tự chạy.
+**Hoặc Supabase local (Docker):** `npm run db:start`, rồi copy `API URL`, `anon key`, `service_role key` vào `.env.local`. Migration tự chạy. `supabase/config.jsonc` đã tắt tự đăng ký.
+
+Tạo tài khoản superadmin đầu tiên. Chạy lại lệnh này sẽ đặt lại mật khẩu và vai trò.
 
 ```bash
-npm run dev          # http://localhost:3000
+npm run create-user -- --email <email> --password <mật-khẩu> --role superadmin
+npm run dev          # http://localhost:3000 → Đăng nhập
 ```
 
 Thử với điện thoại cùng mạng wifi: đặt `NEXT_PUBLIC_SITE_URL=http://<IP-LAN-của-máy>:3000` để QR trỏ đúng địa chỉ. Nếu dùng Supabase local, `NEXT_PUBLIC_SUPABASE_URL` cũng phải là IP LAN thay vì `127.0.0.1`.
@@ -63,10 +69,13 @@ Thử với điện thoại cùng mạng wifi: đặt `NEXT_PUBLIC_SITE_URL=http
 npm test             # unit test: chấm điểm, chuẩn hóa, luật chuyển trạng thái, dựng state
 npm run typecheck
 npm run lint
-npm run bots -- --players 30                       # E2E tự động: tạo quiz, 30 bot chơi hết game, đối chiếu điểm
-npm run bots -- --players 30 --pin 123456          # chỉ bot vào phòng bạn đang host trên trình duyệt
-npm run bots -- --players 30 --base https://<app>.vercel.app   # chạy vào bản đã deploy
+# E2E tự động: đăng nhập, tạo quiz, 30 bot chơi hết game, đối chiếu điểm, xóa quiz test
+npm run bots -- --players 30 --email <email> --password <mật-khẩu>
+npm run bots -- --players 30 --pin 123456          # chỉ bot vào phòng bạn đang host (không cần tài khoản)
+npm run bots -- --players 30 --email <email> --password <mật-khẩu> --base https://<app>.vercel.app
 ```
+
+Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok": true` và `"signups": "disabled (ok)"`. Trang này không bao giờ hiện giá trị key.
 
 ## Deploy lên Vercel
 
@@ -74,10 +83,21 @@ npm run bots -- --players 30 --base https://<app>.vercel.app   # chạy vào b�
 2. Thêm biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (tùy chọn: `MAX_PLAYERS`).
 3. Deploy. `vercel.json` đặt functions ở `sin1` (Singapore), gần Supabase `ap-southeast-1`.
 
+**Thiết lập tài khoản trên Supabase cloud** (một lần):
+1. *Authentication → Sign In / Providers*: **tắt "Allow new users to sign up"**. Nếu để bật, ai cũng có thể tự tạo tài khoản qua API Supabase và tạo quiz.
+2. *Authentication → Users → Add user → Create new user*: nhập email và mật khẩu, tick **Auto Confirm User**.
+3. *SQL Editor*, gán quyền superadmin:
+   ```sql
+   update auth.users set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"superadmin"}'
+   where email = 'superadmin@kahut.com';
+   ```
+   Các tài khoản sau đó superadmin tự tạo trong app ở `/admin/users`.
+
 ## Lưu ý vận hành
 
 - Project Supabase gói free **tự tạm dừng sau 7 ngày không hoạt động**. Mở dashboard để bật lại trước buổi chơi.
 - Realtime cần bật *Allow public access* (mặc định đã bật) trong Supabase → Realtime → Settings, vì kênh game là kênh public.
 - `SUPABASE_SERVICE_ROLE_KEY` là khóa bí mật: chỉ đặt ở server/Vercel, không bao giờ thêm tiền tố `NEXT_PUBLIC_`.
-- Mất link quản lý là mất quyền sửa quiz. Danh sách "Quiz của tôi" chỉ lưu trong trình duyệt đã tạo quiz.
+- Xóa một tài khoản không xóa quiz của tài khoản đó. Quiz còn lại và chỉ superadmin xem được (hiện là "Người tạo").
+- Superadmin không tự xóa mình hay tự bỏ quyền superadmin được, để tránh khóa luôn hệ thống.
 - Đổi tên app: sửa `APP_NAME` trong `lib/config.ts`.

@@ -1,6 +1,7 @@
 import imageCompression from "browser-image-compression";
 import { IMAGE_BUCKET, IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from "../config";
-import { ApiError, api } from "./api";
+import { ApiError } from "./api";
+import { authApi } from "./auth";
 import { getBrowserClient } from "./supabase";
 
 const KEEP_GIF_MAX_BYTES = 2 * 1024 * 1024;
@@ -10,7 +11,7 @@ const KEEP_GIF_MAX_BYTES = 2 * 1024 * 1024;
  * straight to Supabase Storage with a signed URL from our API.
  * Small GIFs are kept as-is so animations survive.
  */
-export async function uploadQuizImage(file: File, quizId: string, editToken: string): Promise<string> {
+export async function uploadQuizImage(file: File, quizId: string): Promise<string> {
   if (!file.type.startsWith("image/")) throw new ApiError("bad_image_type", 400);
 
   let blob: Blob = file;
@@ -31,9 +32,9 @@ export async function uploadQuizImage(file: File, quizId: string, editToken: str
   }
   if (blob.size > IMAGE_MAX_BYTES) throw new ApiError("image_too_large", 400);
 
-  const target = await api<{ path: string; token: string; publicUrl: string }>(
+  const target = await authApi<{ path: string; token: string; publicUrl: string }>(
     `/api/quizzes/${quizId}/upload-url`,
-    { method: "POST", token: editToken, body: { contentType } },
+    { method: "POST", body: { contentType } },
   );
 
   const { error } = await getBrowserClient()

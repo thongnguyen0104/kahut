@@ -1,6 +1,7 @@
 /**
- * Browser-side persistence. Tokens live in localStorage so a refresh keeps the
- * player/host/editor session. Every access is guarded: storage can be blocked.
+ * Browser-side persistence. Player/host tokens live in localStorage so a refresh
+ * keeps the session. Every access is guarded: storage can be blocked.
+ * (Quizzes themselves belong to accounts and are listed from the API.)
  */
 
 export interface PlayerSession {
@@ -15,14 +16,6 @@ export interface HostSession {
   pin: string;
   hostToken: string;
   quizId: string;
-}
-
-export interface SavedQuiz {
-  id: string;
-  editToken: string;
-  title: string;
-  questionCount: number;
-  updatedAt: string;
 }
 
 function read<T>(key: string): T | null {
@@ -49,23 +42,3 @@ export const clearPlayerSession = (pin: string) => write(`player:${pin}`, null);
 
 export const getHostSession = (pin: string) => read<HostSession>(`host:${pin}`);
 export const saveHostSession = (s: HostSession) => write(`host:${s.pin}`, s);
-
-const QUIZZES_KEY = "my-quizzes";
-
-export function listMyQuizzes(): SavedQuiz[] {
-  const list = read<SavedQuiz[]>(QUIZZES_KEY);
-  return Array.isArray(list) ? list : [];
-}
-
-export function upsertMyQuiz(quiz: SavedQuiz): void {
-  const rest = listMyQuizzes().filter((q) => q.id !== quiz.id);
-  write(QUIZZES_KEY, [quiz, ...rest]);
-}
-
-export function removeMyQuiz(id: string): void {
-  write(QUIZZES_KEY, listMyQuizzes().filter((q) => q.id !== id));
-}
-
-export function getQuizToken(id: string): string | null {
-  return listMyQuizzes().find((q) => q.id === id)?.editToken ?? null;
-}

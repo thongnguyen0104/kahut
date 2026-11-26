@@ -1,50 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Spinner, buttonClass, inputClass } from "@/components/ui";
-import { api, errorCode } from "@/lib/client/api";
-import { useHydrated } from "@/lib/client/hooks";
-import { getQuizToken, saveHostSession, upsertMyQuiz } from "@/lib/client/storage";
+import { Button, Card, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Spinner, Tag, buttonClass, inputBase, inputClass, labelClass } from "@/components/ui";
+import { errorCode } from "@/lib/client/api";
+import { authApi, useRequireAuth } from "@/lib/client/auth";
+import { saveHostSession } from "@/lib/client/storage";
 import { LIMITS } from "@/lib/config";
 import type { Question, Quiz, QuizContent } from "@/lib/game/types";
 import { findQuizProblems, type QuizProblem } from "@/lib/game/validate";
 import { useErrorText, useI18n } from "@/lib/i18n/I18nProvider";
 import { ImageField } from "./ImageField";
-import { QuestionEditor, newQuestion, randomId } from "./QuestionEditor";
+import { QuestionEditor, TYPE_TONE, newQuestion, randomId } from "./QuestionEditor";
 
 const AUTOSAVE_MS = 1500;
 
 export default function EditorClient() {
-  const hydrated = useHydrated();
   const { id } = useParams<{ id: string }>();
-  const urlToken = useSearchParams().get("k");
-  if (!hydrated) return <FullPageSpinner />;
-  return <EditorGate key={id} id={id} urlToken={urlToken} />;
+  const { ready } = useRequireAuth();
+  if (!ready) return <FullPageSpinner />;
+  return <Editor key={id} id={id} />;
 }
 
-function EditorGate({ id, urlToken }: { id: string; urlToken: string | null }) {
-  const { t } = useI18n();
-  const [token] = useState(() => urlToken || getQuizToken(id));
-  if (!token) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="max-w-md text-lg font-bold">{t("editor.noToken")}</p>
-        <Link href="/my-quizzes" className={buttonClass("secondary")}>
-          {t("home.myQuizzes")}
-        </Link>
-      </div>
-    );
-  }
-  return <Editor id={id} token={token} />;
-}
-
-function rememberQuiz(id: string, token: string, quiz: QuizContent, updatedAt: string) {
-  upsertMyQuiz({ id, editToken: token, title: quiz.title, questionCount: quiz.questions.length, updatedAt });
-}
-
-function Editor({ id, token }: { id: string; token: string }) {
+function Editor({ id }: { id: string }) {
   const { t } = useI18n();
   const errorText = useErrorText();
   const router = useRouter();
@@ -57,7 +36,6 @@ function Editor({ id, token }: { id: string; token: string }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProblems, setShowProblems] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const version = useRef(0);
   const savingRef = useRef(false);
@@ -69,7 +47,7 @@ function Editor({ id, token }: { id: string; token: string }) {
   // Load once.
   useEffect(() => {
     let cancelled = false;
-    api<{ quiz: Quiz }>(`/api/quizzes/${id}`, { token })
+    authApi<{ quiz: Quiz }>(`/api/quizzes/${id}`)
       .then(({ quiz: loaded }) => {
         if (cancelled) return;
         const content: QuizContent = {
@@ -80,7 +58,6 @@ function Editor({ id, token }: { id: string; token: string }) {
         };
         setQuiz(content);
         setSelected(loaded.title ? 0 : -1);
-        rememberQuiz(id, token, loaded, loaded.updatedAt);
       })
       .catch((err) => {
         if (!cancelled) setLoadError(errorCode(err));
@@ -88,7 +65,7 @@ function Editor({ id, token }: { id: string; token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id, token]);
+  }, [id]);
 
   const save = useCallback(async (): Promise<boolean> => {
     const current = quizRef.current;
@@ -97,8 +74,7 @@ function Editor({ id, token }: { id: string; token: string }) {
     setSaving(true);
     const savedVersion = version.current;
     try {
-      const res = await api<{ quiz: Quiz }>(`/api/quizzes/${id}`, { method: "PUT", token, body: current });
-      rememberQuiz(id, token, res.quiz, res.quiz.updatedAt);
+      await authApi<{ quiz: Quiz }>(`/api/quizzes/${id}`, { method: "PUT", body: current });
       // Keep the local copy (the user may still be typing); clear dirty only if nothing changed meanwhile.
       if (version.current === savedVersion) setDirty(false);
       setError(null);
@@ -110,7 +86,7 @@ function Editor({ id, token }: { id: string; token: string }) {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [id, token]);
+  }, [id]);
 
   // Autosave shortly after the last edit.
   useEffect(() => {
@@ -207,9 +183,8 @@ function Editor({ id, token }: { id: string; token: string }) {
       return;
     }
     try {
-      const res = await api<{ pin: string; hostToken: string }>("/api/games", {
+      const res = await authApi<{ pin: string; hostToken: string }>("/api/games", {
         method: "POST",
-        token,
         body: { quizId: id },
       });
       saveHostSession({ pin: res.pin, hostToken: res.hostToken, quizId: id });
@@ -220,96 +195,109 @@ function Editor({ id, token }: { id: string; token: string }) {
     }
   }
 
-  const manageUrl = `${window.location.origin}/quiz/${id}/edit?k=${encodeURIComponent(token)}`;
-  async function copyManageLink() {
-    try {
-      await navigator.clipboard.writeText(manageUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt(t("editor.manageLink"), manageUrl);
-    }
-  }
-
   const problemsFor = (index: number) => problems.filter((p) => p.questionIndex === index);
   const current = selected >= 0 ? quiz.questions[selected] : null;
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-ink/90 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b-3 border-ink bg-paper px-4 py-3">
         <Logo className="text-xl" />
+        <Link href="/my-quizzes" className={buttonClass("ghost", "sm", "hidden sm:inline-flex")}>
+          ← {t("home.myQuizzes")}
+        </Link>
         <input
           value={quiz.title}
           onChange={(e) => update((q) => ({ ...q, title: e.target.value }))}
           maxLength={LIMITS.titleMax}
           placeholder={t("editor.titlePlaceholder")}
           aria-label={t("editor.titlePlaceholder")}
-          className="min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-lg font-extrabold outline-none ring-line hover:ring-1 focus:ring-2 focus:ring-accent"
+          className="min-w-0 flex-1 rounded-xl border-3 border-transparent bg-transparent px-2 py-1 font-display text-2xl font-extrabold outline-none placeholder:text-ink/30 hover:border-ink/20 focus:border-ink focus:bg-white"
         />
-        <span className="flex items-center gap-1.5 text-sm font-bold text-white/60">
+        <span
+          className={`flex items-center gap-1.5 rounded-full border-2 border-ink px-3 py-1 text-xs font-extrabold uppercase tracking-wide ${saving ? "bg-white" : dirty ? "bg-sun" : "bg-mint"}`}
+        >
           {saving ? (
             <>
-              <Spinner className="size-4" /> {t("common.saving")}
+              <Spinner className="size-3.5" /> {t("common.saving")}
             </>
           ) : dirty ? (
             t("common.unsaved")
           ) : (
-            t("common.saved")
+            `✓ ${t("common.saved")}`
           )}
         </span>
         <Button variant="secondary" size="sm" onClick={() => void save()} disabled={saving || !dirty}>
           {t("common.save")}
         </Button>
         <Button size="md" onClick={() => void play()} disabled={starting}>
-          {starting ? t("editor.starting") : t("editor.play")}
+          ▶ {starting ? t("editor.starting") : t("editor.play")}
         </Button>
         <LanguageToggle />
       </header>
 
-      <div className="mx-auto grid w-full max-w-6xl flex-1 gap-4 p-4 md:grid-cols-[240px_1fr]">
-        <aside className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 gap-6 p-4 sm:p-6 md:grid-cols-[260px_1fr]">
+        <aside className="flex gap-3 overflow-x-auto pb-2 md:flex-col md:overflow-visible">
           <SidebarItem active={selected === -1} onClick={() => setSelected(-1)} warn={problemsFor(-1).length > 0}>
-            <span className="font-extrabold">{t("editor.quizInfo")}</span>
+            <span className="flex items-center gap-2 font-display font-extrabold">
+              <span className="flex size-7 items-center justify-center rounded-lg border-2 border-ink bg-white" aria-hidden>
+                ✎
+              </span>
+              {t("editor.quizInfo")}
+            </span>
           </SidebarItem>
-          <p className="hidden px-1 pt-2 text-xs font-bold uppercase tracking-wider text-white/50 md:block">
+          <p className="hidden px-1 pt-2 font-display text-sm font-extrabold md:block">
             {t("editor.questions")} · {quiz.questions.length}
           </p>
           {quiz.questions.map((q, i) => (
             <SidebarItem key={q.id} active={selected === i} onClick={() => setSelected(i)} warn={problemsFor(i).length > 0}>
-              <span className="text-xs font-bold text-white/60">
-                {t("editor.question", { n: i + 1 })} · {t(`qtype.${q.type}`)}
+              <span className="flex w-full items-start gap-2.5">
+                <span
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-lg border-2 border-ink font-display font-extrabold ${TYPE_TONE[q.type]}`}
+                >
+                  {i + 1}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{t(`qtype.${q.type}`)}</span>
+                  <span className="line-clamp-2 text-sm font-semibold leading-snug">
+                    {q.prompt || <span className="text-ink/40">{t("editor.emptyPrompt")}</span>}
+                  </span>
+                </span>
+                {q.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={q.imageUrl} alt="" className="size-10 shrink-0 rounded-md border-2 border-ink object-cover" />
+                )}
               </span>
-              <span className="line-clamp-2 text-sm font-bold">{q.prompt || t("editor.emptyPrompt")}</span>
             </SidebarItem>
           ))}
-          <Button
-            variant="secondary"
-            className="shrink-0"
+          <button
+            type="button"
             onClick={addQuestion}
             disabled={quiz.questions.length >= LIMITS.questionsMax}
+            className="flex w-44 shrink-0 items-center justify-center gap-2 rounded-2xl border-3 border-dashed border-ink/50 py-4 font-display font-extrabold transition hover:border-ink hover:bg-white disabled:opacity-40 md:w-auto"
           >
             + {t("editor.addQuestion")}
-          </Button>
+          </button>
         </aside>
 
-        <main className="flex min-w-0 flex-col gap-4">
+        <main className="flex min-w-0 flex-col gap-5">
           {showProblems && problems.length > 0 && <ProblemList problems={problems} onPick={setSelected} />}
           <ErrorBanner>{errorText(error)}</ErrorBanner>
 
           {selected === -1 && (
             <Card className="flex flex-col gap-5">
+              <Tag tone="lilac">{t("editor.quizInfo")}</Tag>
               <label className="flex flex-col gap-2">
-                <span className="text-sm font-bold text-white/70">{t("editor.titlePlaceholder")}</span>
+                <span className={labelClass}>{t("editor.titlePlaceholder")}</span>
                 <input
                   value={quiz.title}
                   onChange={(e) => update((q) => ({ ...q, title: e.target.value }))}
                   maxLength={LIMITS.titleMax}
                   placeholder={t("editor.untitled")}
-                  className={`${inputClass} text-xl font-extrabold`}
+                  className={`${inputBase} font-display text-2xl font-extrabold`}
                 />
               </label>
               <label className="flex flex-col gap-2">
-                <span className="text-sm font-bold text-white/70">{t("editor.description")}</span>
+                <span className={labelClass}>{t("editor.description")}</span>
                 <textarea
                   value={quiz.description}
                   onChange={(e) => update((q) => ({ ...q, description: e.target.value }))}
@@ -320,32 +308,28 @@ function Editor({ id, token }: { id: string; token: string }) {
                 />
               </label>
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-bold text-white/70">{t("editor.cover")}</span>
+                <span className={labelClass}>{t("editor.cover")}</span>
                 <ImageField
                   value={quiz.coverImageUrl}
                   onChange={(coverImageUrl) => update((q) => ({ ...q, coverImageUrl }))}
                   quizId={id}
-                  editToken={token}
                   compact
                 />
-              </div>
-              <div className="flex flex-col gap-2 rounded-2xl bg-accent/10 p-4 ring-1 ring-accent/40">
-                <span className="text-sm font-bold text-accent">{t("editor.manageLink")}</span>
-                <div className="flex gap-2">
-                  <input readOnly value={manageUrl} onFocus={(e) => e.target.select()} className={`${inputClass} text-sm`} />
-                  <Button variant="secondary" onClick={() => void copyManageLink()}>
-                    {copied ? t("common.copied") : t("common.copy")}
-                  </Button>
-                </div>
-                <p className="text-xs text-white/70">{t("editor.manageLinkHint")}</p>
               </div>
             </Card>
           )}
 
           {current && (
-            <Card className="flex flex-col gap-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-xl font-black">{t("editor.question", { n: selected + 1 })}</h2>
+            <Card className="flex flex-col gap-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="flex items-center gap-3 text-3xl font-extrabold">
+                  <span
+                    className={`flex size-11 items-center justify-center rounded-xl border-3 border-ink shadow-hard-sm ${TYPE_TONE[current.type]}`}
+                  >
+                    {selected + 1}
+                  </span>
+                  {t("editor.question", { n: selected + 1 })}
+                </h2>
                 <div className="flex flex-wrap gap-1">
                   <Button variant="ghost" size="sm" onClick={() => moveQuestion(selected, -1)} disabled={selected === 0}>
                     ↑ {t("editor.moveUp")}
@@ -358,10 +342,10 @@ function Editor({ id, token }: { id: string; token: string }) {
                   >
                     ↓ {t("editor.moveDown")}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => duplicateQuestion(selected)}>
-                    {t("editor.duplicate")}
+                  <Button variant="secondary" size="sm" onClick={() => duplicateQuestion(selected)}>
+                    ⧉ {t("editor.duplicate")}
                   </Button>
-                  <Button variant="ghost" size="sm" className="text-rose-300" onClick={() => deleteQuestion(selected)}>
+                  <Button variant="danger" size="sm" onClick={() => deleteQuestion(selected)}>
                     {t("editor.deleteQuestion")}
                   </Button>
                 </div>
@@ -371,7 +355,6 @@ function Editor({ id, token }: { id: string; token: string }) {
                 question={current}
                 onChange={(q) => setQuestion(selected, q)}
                 quizId={id}
-                editToken={token}
               />
             </Card>
           )}
@@ -396,10 +379,15 @@ function SidebarItem({
     <button
       type="button"
       onClick={onClick}
-      className={`relative flex w-44 shrink-0 flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left ring-1 transition md:w-auto ${active ? "bg-white/15 ring-accent" : "bg-white/5 ring-line hover:bg-white/10"}`}
+      aria-current={active ? "true" : undefined}
+      className={`press relative flex w-52 shrink-0 flex-col items-start rounded-2xl border-3 border-ink p-2.5 text-left md:w-auto ${active ? "bg-sun shadow-hard" : "bg-white shadow-hard-sm"}`}
     >
       {children}
-      {warn && <span className="absolute right-2 top-2 size-2.5 rounded-full bg-bad" />}
+      {warn && (
+        <span className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full border-2 border-ink bg-tomato font-display text-xs font-black">
+          !
+        </span>
+      )}
     </button>
   );
 }
@@ -407,13 +395,13 @@ function SidebarItem({
 function ProblemList({ problems, onPick }: { problems: QuizProblem[]; onPick: (index: number) => void }) {
   const { t } = useI18n();
   return (
-    <div role="alert" className="rounded-2xl bg-bad/15 p-4 ring-1 ring-bad/40">
-      <p className="mb-2 font-extrabold text-rose-200">{t("editor.fixBeforePlay")}</p>
-      <ul className="flex flex-col gap-1 text-sm">
+    <div role="alert" className="rounded-2xl border-3 border-ink bg-tomato-soft p-4 shadow-hard-sm">
+      <p className="mb-2 font-display font-extrabold">{t("editor.fixBeforePlay")}</p>
+      <ul className="flex flex-col gap-1 text-sm font-semibold">
         {problems.map((p, i) => (
           <li key={i}>
-            <button type="button" className="text-left text-rose-100 underline-offset-2 hover:underline" onClick={() => onPick(p.questionIndex)}>
-              {t(`problems.${p.code}`, { n: p.questionIndex + 1 })}
+            <button type="button" className="text-left underline decoration-2 underline-offset-2 hover:decoration-tomato" onClick={() => onPick(p.questionIndex)}>
+              → {t(`problems.${p.code}`, { n: p.questionIndex + 1 })}
             </button>
           </li>
         ))}

@@ -1,11 +1,14 @@
 /**
  * Load test / end-to-end check with simulated players.
  *
- *   npm run bots -- --players 30                 # full auto: creates a quiz, hosts it, plays it, verifies scores
- *   npm run bots -- --players 30 --pin 123456    # bots only: join a room you host in the browser
+ *   npm run bots -- --players 30 --email you@example.com --password ...
+ *       full auto: signs in, creates a quiz, hosts it, plays it, verifies scores, deletes the quiz
+ *   npm run bots -- --players 30 --pin 123456
+ *       bots only: join a room you host in the browser (no account needed)
  *
  * Options: --base http://localhost:3000  --min-delay 500  --max-delay 6000
  * Reads NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY from .env.local.
+ * The account can also come from BOT_EMAIL / BOT_PASSWORD.
  */
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 import type { GameView, PublicQuestion, QuizContent } from "../lib/game/types";
@@ -27,6 +30,8 @@ const PLAYERS = Number(arg("players", "30"));
 const GIVEN_PIN = arg("pin", "");
 const MIN_DELAY = Number(arg("min-delay", "500"));
 const MAX_DELAY = Number(arg("max-delay", "6000"));
+const EMAIL = arg("email", process.env.BOT_EMAIL ?? "");
+const PASSWORD = arg("password", process.env.BOT_PASSWORD ?? "");
 const SUPABASE_URL = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -214,12 +219,24 @@ async function startBot(pin: string, i: number, quiz?: QuizContent): Promise<Bot
 
 /* -------------------------------------------------------------- host */
 
+/** Signs in the quiz-creator account; creating quizzes requires one. */
+async function signIn(): Promise<string> {
+  if (!EMAIL || !PASSWORD) {
+    throw new Error("Auto mode needs an account: --email <email> --password <password> (or BOT_EMAIL / BOT_PASSWORD)");
+  }
+  const client = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+  const { data, error } = await client.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  if (error || !data.session) throw new Error(`Sign-in failed: ${error?.message ?? "no session"}`);
+  return data.session.access_token;
+}
+
 async function autoHost(): Promise<void> {
-  const created = await call<{ id: string; editToken: string }>("/api/quizzes", { method: "POST", body: {} });
-  await call(`/api/quizzes/${created.id}`, { method: "PUT", token: created.editToken, body: DEMO_QUIZ });
+  const accessToken = await signIn();
+  const created = await call<{ id: string }>("/api/quizzes", { method: "POST", token: accessToken, body: {} });
+  await call(`/api/quizzes/${created.id}`, { method: "PUT", token: accessToken, body: DEMO_QUIZ });
   const game = await call<{ pin: string; hostToken: string }>("/api/games", {
     method: "POST",
-    token: created.editToken,
+    token: accessToken,
     body: { quizId: created.id },
   });
   console.log(`Room ${game.pin} created. Starting ${PLAYERS} bots…`);
@@ -279,6 +296,8 @@ async function autoHost(): Promise<void> {
   console.log(mismatches === 0 ? "✔ All scores match the sum of revealed points" : `✘ ${mismatches} score mismatches`);
 
   await Promise.all(bots.map((b) => b.client.removeAllChannels()));
+  // Don't leave the test quiz in the account's list.
+  await call(`/api/quizzes/${created.id}`, { method: "DELETE", token: accessToken }).catch(() => {});
   report();
   if (mismatches > 0 || final.status !== "finished") process.exitCode = 1;
 }

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { IMAGE_BUCKET, IMAGE_MIME_TYPES } from "@/lib/config";
-import { HttpError, bearerToken, handle, json, readJson } from "@/lib/server/http";
-import { getEditableQuiz } from "@/lib/server/quizzes";
+import { requireUser } from "@/lib/server/auth";
+import { HttpError, handle, json, readJson } from "@/lib/server/http";
+import { getOwnedQuiz } from "@/lib/server/quizzes";
 import { getAdminClient } from "@/lib/server/supabase";
 
 const EXTENSIONS: Record<(typeof IMAGE_MIME_TYPES)[number], string> = {
@@ -12,13 +13,13 @@ const EXTENSIONS: Record<(typeof IMAGE_MIME_TYPES)[number], string> = {
 };
 
 /**
- * Issues a one-time signed upload URL for an image of this quiz.
+ * Issues a one-time signed upload URL for an image of a quiz the caller owns.
  * The browser then uploads straight to Supabase Storage.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/quizzes/[id]/upload-url">) {
   return handle(async () => {
     const { id } = await ctx.params;
-    await getEditableQuiz(id, bearerToken(req));
+    await getOwnedQuiz(id, await requireUser(req));
 
     const { contentType } = await readJson(req);
     if (typeof contentType !== "string" || !(contentType in EXTENSIONS)) {

@@ -70,9 +70,22 @@ export async function GET() {
     }),
   ]);
 
+  // Accounts must only come from a superadmin: public sign-up has to be off in Supabase.
+  const signups = await check(async () => {
+    const url = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const res = await fetch(`${url}/auth/v1/settings`, {
+      headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "" },
+      cache: "no-store",
+    });
+    const settings = (await res.json()) as { disable_signup?: boolean };
+    return settings.disable_signup
+      ? null
+      : "WARNING: public sign-up is ON. Turn off 'Allow new users to sign up' in Supabase → Authentication.";
+  });
+
   const ok = db === "ok" && storage === "ok" && realtime === "ok";
   return Response.json(
-    { ok, env, db, storage, realtime },
+    { ok, env, db, storage, realtime, signups: signups === "ok" ? "disabled (ok)" : signups },
     { status: ok ? 200 : 503, headers: { "cache-control": "no-store" } },
   );
 }

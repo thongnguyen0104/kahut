@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
-import { Button, Card, ErrorBanner, FullPageSpinner, TopBar, inputClass } from "@/components/ui";
+import { Button, Card, ErrorBanner, FullPageSpinner, PinTiles, Tag, TopBar, labelClass } from "@/components/ui";
 import { AVATAR_IDS, randomAvatarId } from "@/lib/avatars";
 import { api, cleanPin, errorCode } from "@/lib/client/api";
 import { useHydrated } from "@/lib/client/hooks";
@@ -89,16 +89,31 @@ function JoinForm({ initialPin }: { initialPin: string }) {
     }
   }
 
+  const step = room ? 2 : 1;
+
   return (
     <div className="flex flex-1 flex-col">
       <TopBar />
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 pb-12 pt-4">
-        <h1 className="text-center text-2xl font-black">{t("join.title")}</h1>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 pb-12 pt-2">
+        <ol className="flex items-center gap-2 font-display text-sm font-extrabold" aria-label={t("join.title")}>
+          {[t("join.stepPin"), t("join.stepYou")].map((label, i) => (
+            <li key={label} className="flex items-center gap-2">
+              {i > 0 && <span className="h-[3px] w-6 rounded bg-ink" aria-hidden />}
+              <span
+                className={`flex size-7 items-center justify-center rounded-full border-3 border-ink ${step > i ? "bg-sun" : "bg-white"}`}
+              >
+                {i + 1}
+              </span>
+              <span className={step === i + 1 ? "" : "text-ink-soft"}>{label}</span>
+            </li>
+          ))}
+        </ol>
 
         {!room && (
-          <Card>
-            <form onSubmit={submitPin} className="flex flex-col gap-3">
-              <label className="text-sm font-bold text-white/70" htmlFor="pin">
+          <Card className="flex flex-col gap-4" style={{ transform: "rotate(-0.6deg)" }}>
+            <h1 className="text-3xl font-extrabold">{t("join.title")}</h1>
+            <form onSubmit={submitPin} className="flex flex-col gap-4">
+              <label className={labelClass} htmlFor="pin">
                 {t("join.pinLabel")}
               </label>
               <input
@@ -108,19 +123,28 @@ function JoinForm({ initialPin }: { initialPin: string }) {
                 inputMode="numeric"
                 autoComplete="off"
                 autoFocus
-                className={`${inputClass} h-16 text-center text-3xl font-black tracking-[0.3em]`}
+                placeholder="000000"
+                className="h-20 w-full rounded-2xl border-3 border-ink bg-paper-2 text-center font-display text-5xl font-extrabold tracking-[0.25em] tabular-nums outline-none placeholder:text-ink/20 focus:bg-white focus:shadow-hard-sm"
               />
-              <Button type="submit" size="lg" disabled={checking}>
-                {checking ? t("common.loading") : t("join.checkPin")}
+              <Button type="submit" size="xl" disabled={checking}>
+                {checking ? t("common.loading") : `${t("join.checkPin")} →`}
               </Button>
             </form>
           </Card>
         )}
 
+        {room && (
+          <div className="flex flex-col items-start gap-2">
+            <Tag tone="mint">{t("join.pinLabel")}</Tag>
+            <PinTiles pin={room.pin} size="md" />
+            <p className="font-display text-xl font-extrabold">{room.quizTitle}</p>
+          </div>
+        )}
+
         {room && existing && (
-          <Card className="flex flex-col items-center gap-4 text-center">
-            <Avatar id={existing.avatar} size={72} />
-            <Button size="lg" className="w-full" onClick={() => router.replace(`/play/${room.pin}`)}>
+          <Card tone="sun" className="flex flex-col items-center gap-4 text-center">
+            <Avatar id={existing.avatar} size={88} />
+            <Button size="lg" variant="dark" className="w-full" onClick={() => router.replace(`/play/${room.pin}`)}>
               {t("join.continueAs", { name: existing.nickname })}
             </Button>
             <Button variant="ghost" onClick={() => setExisting(null)}>
@@ -130,48 +154,43 @@ function JoinForm({ initialPin }: { initialPin: string }) {
         )}
 
         {room && !existing && (
-          <Card>
-            <form onSubmit={join} className="flex flex-col gap-4">
-              <div className="text-center">
-                <p className="text-sm font-bold text-white/60">{t("join.room", { pin: room.pin })}</p>
-                <p className="text-lg font-extrabold">{room.quizTitle}</p>
+          <form onSubmit={join} className="flex flex-col gap-5">
+            {/* Live "name sticker" preview of how you'll appear on the big screen. */}
+            <div className="sticker flex items-center gap-3 bg-white p-3 pr-5" style={{ transform: "rotate(-1.5deg)" }}>
+              <Avatar id={avatar} size={64} />
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                maxLength={LIMITS.nicknameMax}
+                autoFocus
+                autoComplete="nickname"
+                aria-label={t("join.nickname")}
+                placeholder={t("join.nicknamePlaceholder")}
+                className="min-w-0 flex-1 border-b-3 border-dashed border-ink/40 bg-transparent py-2 font-display text-2xl font-extrabold outline-none placeholder:text-ink/30 focus:border-ink"
+              />
+            </div>
+
+            <fieldset className="flex flex-col gap-3">
+              <legend className={`${labelClass} mb-3`}>{t("join.chooseAvatar")}</legend>
+              <div className="grid grid-cols-6 gap-2">
+                {AVATAR_IDS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setAvatar(id)}
+                    aria-pressed={avatar === id}
+                    className={`press rounded-xl border-3 p-1 ${avatar === id ? "border-ink bg-sun shadow-hard-sm" : "border-transparent"}`}
+                  >
+                    <Avatar id={id} size={44} className="w-full" />
+                  </button>
+                ))}
               </div>
+            </fieldset>
 
-              <label className="flex flex-col gap-2">
-                <span className="text-sm font-bold text-white/70">{t("join.nickname")}</span>
-                <input
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  maxLength={LIMITS.nicknameMax}
-                  autoFocus
-                  autoComplete="nickname"
-                  placeholder={t("join.nicknamePlaceholder")}
-                  className={`${inputClass} text-lg font-bold`}
-                />
-              </label>
-
-              <fieldset className="flex flex-col gap-2">
-                <legend className="mb-2 text-sm font-bold text-white/70">{t("join.chooseAvatar")}</legend>
-                <div className="grid grid-cols-6 gap-2">
-                  {AVATAR_IDS.map((id) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setAvatar(id)}
-                      aria-pressed={avatar === id}
-                      className={`rounded-full p-0.5 transition ${avatar === id ? "scale-110 ring-4 ring-accent" : "opacity-70 hover:opacity-100"}`}
-                    >
-                      <Avatar id={id} size={44} className="w-full" />
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <Button type="submit" size="lg" disabled={joining}>
-                {joining ? t("join.joining") : t("join.submit")}
-              </Button>
-            </form>
-          </Card>
+            <Button type="submit" size="xl" disabled={joining}>
+              {joining ? t("join.joining") : t("join.submit")}
+            </Button>
+          </form>
         )}
 
         <ErrorBanner>{errorText(error)}</ErrorBanner>

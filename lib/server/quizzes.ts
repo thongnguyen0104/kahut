@@ -1,6 +1,6 @@
 import "server-only";
 import type { Quiz } from "../game/types";
-import { tokenMatches } from "../tokens";
+import type { AuthUser } from "./auth";
 import { HttpError } from "./http";
 import { getAdminClient } from "./supabase";
 
@@ -10,9 +10,13 @@ export interface QuizRow {
   description: string;
   cover_image_url: string | null;
   questions: Quiz["questions"];
-  edit_token_hash: string;
+  owner_id: string | null;
+  owner_email: string | null;
   updated_at: string;
 }
+
+export const QUIZ_COLUMNS =
+  "id,title,description,cover_image_url,questions,owner_id,owner_email,updated_at";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,7 +24,7 @@ export async function getQuizRow(id: string): Promise<QuizRow> {
   if (!UUID.test(id)) throw new HttpError(404, "quiz_not_found");
   const { data, error } = await getAdminClient()
     .from("quizzes")
-    .select("id,title,description,cover_image_url,questions,edit_token_hash,updated_at")
+    .select(QUIZ_COLUMNS)
     .eq("id", id)
     .maybeSingle<QuizRow>();
   if (error) throw error;
@@ -28,10 +32,10 @@ export async function getQuizRow(id: string): Promise<QuizRow> {
   return data;
 }
 
-/** Loads a quiz and checks the caller holds its edit token. */
-export async function getEditableQuiz(id: string, token: string | null): Promise<QuizRow> {
+/** Loads a quiz the account may edit: its own, or any quiz for a superadmin. */
+export async function getOwnedQuiz(id: string, user: AuthUser): Promise<QuizRow> {
   const row = await getQuizRow(id);
-  if (!tokenMatches(token, row.edit_token_hash)) throw new HttpError(403, "forbidden");
+  if (row.owner_id !== user.id && !user.isSuperadmin) throw new HttpError(403, "forbidden");
   return row;
 }
 

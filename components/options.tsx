@@ -1,6 +1,9 @@
 import type { QuestionType } from "@/lib/game/types";
 
-/** Answer tiles use our own palette + icons (star / bolt / heart / moon). */
+/**
+ * Answer stickers: lilac ★ / sun ⚡ / bubblegum ♥ / mint ☾, always with ink text.
+ * True/False: mint ✓ / tomato ✗.
+ */
 const OPTION_BG = ["bg-opt-0", "bg-opt-1", "bg-opt-2", "bg-opt-3"];
 
 const ICONS = [
@@ -18,8 +21,13 @@ const CHECK = "M4.5 12.5l5 5 10-11";
 const CROSS = "M6 6l12 12M18 6 6 18";
 
 export function optionBg(index: number, type: QuestionType, optionId: string): string {
-  if (type === "true_false") return optionId === "true" ? "bg-opt-3" : "bg-opt-2";
+  if (type === "true_false") return optionId === "true" ? "bg-mint" : "bg-tomato";
   return OPTION_BG[index % OPTION_BG.length];
+}
+
+/** Letter shown on the icon badge, so colour is never the only cue. */
+export function optionLetter(index: number): string {
+  return "ABCD"[index] ?? "";
 }
 
 export function OptionIcon({
@@ -35,15 +43,36 @@ export function OptionIcon({
 }) {
   if (type === "true_false") {
     return (
-      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d={optionId === "true" ? CHECK : CROSS} />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="#17130f" strokeWidth="1.2" strokeLinejoin="round" aria-hidden>
       <path d={ICONS[index % ICONS.length]} />
     </svg>
+  );
+}
+
+/** White round badge holding the option icon — the "sticker on a sticker". */
+export function OptionBadge({
+  index,
+  type,
+  optionId,
+  size = "md",
+}: {
+  index: number;
+  type: QuestionType;
+  optionId: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  const box = { sm: "size-8", md: "size-11", lg: "size-14" }[size];
+  const icon = { sm: "size-4", md: "size-6", lg: "size-8" }[size];
+  return (
+    <span className={`flex shrink-0 items-center justify-center rounded-full border-3 border-ink bg-white text-ink ${box}`}>
+      <OptionIcon index={index} type={type} optionId={optionId} className={icon} />
+    </span>
   );
 }
 
