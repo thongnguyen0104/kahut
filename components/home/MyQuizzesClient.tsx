@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AiGenerateDialog } from "@/components/ai/AiGenerateDialog";
 import { Button, ErrorBanner, FullPageSpinner, PageTitle, Spinner, TONE_BG, TopBar, buttonClass, type Tone } from "@/components/ui";
 import type { QuizSummary } from "@/lib/accounts";
 import { errorCode } from "@/lib/client/api";
@@ -33,6 +34,7 @@ function MyQuizzes() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<{ id: string; code: string } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     authApi<{ quizzes: QuizSummary[] }>("/api/quizzes").then(
@@ -95,10 +97,18 @@ function MyQuizzes() {
           <PageTitle label={quizzes ? `${quizzes.length} quiz` : undefined} tone="mint">
             {user?.isSuperadmin ? t("myQuizzes.allTitle") : t("myQuizzes.title")}
           </PageTitle>
-          <Button size="lg" onClick={() => void create()} disabled={creating}>
-            + {creating ? t("home.creating") : t("home.createQuiz")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {user?.isSuperadmin && (
+              <Button size="lg" variant="secondary" onClick={() => setAiOpen(true)} disabled={creating}>
+                ✦ {t("ai.createButton")}
+              </Button>
+            )}
+            <Button size="lg" onClick={() => void create()} disabled={creating}>
+              + {creating ? t("home.creating") : t("home.createQuiz")}
+            </Button>
+          </div>
         </div>
+        {aiOpen && <AiGenerateDialog mode="create" onClose={() => setAiOpen(false)} />}
         {error?.id === "" && <ErrorBanner>{errorText(error.code)}</ErrorBanner>}
 
         {!quizzes ? (

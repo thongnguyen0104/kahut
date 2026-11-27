@@ -126,3 +126,111 @@ vercel.json            region sin1
 - Project Supabase gói free **tự tạm dừng sau 7 ngày không hoạt động**. Mở dashboard để bật lại trước buổi chơi, hoặc nâng lên gói Pro nếu dùng thường xuyên.
 - Gói free (Supabase 200 kết nối realtime, 2 triệu tin nhắn/tháng; Vercel Hobby) dư sức cho 25–50 người mỗi phòng và vài phòng chạy song song.
 - `SUPABASE_SERVICE_ROLE_KEY` chỉ được đặt trong biến môi trường của Vercel, tuyệt đối không có tiền tố `NEXT_PUBLIC_`.
+
+
+---
+
+## Tính năng mới — Sinh quiz bằng AI (Gemini, gói free của Google AI Studio)
+
+### Context
+Bạn muốn superadmin nhập chủ đề và số câu trên UI, bấm một nút là app gọi Gemini sinh ra bộ câu hỏi. Key Gemini free của AI Studio đủ dùng cho việc này:
+- Mỗi lần sinh một bộ quiz chỉ tốn **1 request**. Gói free (theo các nguồn bên thứ ba, cần đối chiếu trang rate limit của AI Studio) cho khoảng **5 request/phút, 20 request/ngày** với Flash và khoảng **15 request/phút, 500 request/ngày** với Flash-Lite. Hạn mức tính chung cho cả Google project, reset lúc 0h giờ Pacific.
+- Gemini hỗ trợ **structured output theo JSON Schema**, nên kết quả trả về luôn là JSON đúng khuôn. Server vẫn kiểm tra lại toàn bộ.
+- Giới hạn: gói free **không sinh ảnh**, nên câu hỏi AI tạo ra không có ảnh hay nhạc; bạn tự thêm sau trong trình soạn quiz nếu muốn. Ở gói free, Google có thể dùng nội dung prompt để cải thiện sản phẩm, nên đừng nhập dữ liệu nhạy cảm vào ô chủ đề.
+
+Quyết định đã chốt:
+- **Chỉ superadmin** được dùng: server dùng `requireSuperadmin`, UI chỉ hiện nút khi `user.isSuperadmin`.
+- **Hai chỗ đặt nút, chung một API:**
+  1. Trang "Quiz của tôi": nút "Tạo quiz bằng AI". Sinh xong thì tạo quiz mới và mở trang soạn quiz để bạn xem lại.
+  2. Trang soạn quiz: nút "Thêm câu hỏi bằng AI" thêm câu vào quiz đang sửa. Câu mới vào state của editor, autosave lưu như bình thường.
+
+### Thiết kế
+
+#### Biến môi trường (chỉ phía server, không có tiền tố `NEXT_PUBLIC_`)
+- `GEMINI_API_KEY` (bắt buộc).
+- `GEMINI_MODEL` (tùy chọn, mặc định `gemini-3.8-flash`).
+- `GEMINI_FALLBACK_MODEL` (tùy chọn, mặc định `gemini-3.5-flash-lite`). Server dùng model này khi model chính trả 429/503/404.
+- Bước 1 lúc làm: chạy `GET https://generativelanguage.googleapis.com/v1beta/models` bằng key của bạn để xác nhận tên model. Nếu tên khác thì sửa giá trị mặc định.
+- Thêm cả ba biến vào `.env.example` và đặt trên Vercel.
+
+#### Thư viện
+Dùng SDK chính thức `@google/genai` (`ai.models.generateContent({ model, contents, config: { systemInstruction, responseMimeType: "application/json", responseJsonSchema } })`). Lý do: dạng REST thô của Gemini vừa đổi tên trường (`responseFormat.text.schema` so với `responseJsonSchema`), SDK lo phần này cho mình.
+
+#### `lib/ai/quizGen.ts` (mới, thuần logic, test được bằng Vitest)
+- `GenerateInput`: `{ topic, count, types: QuestionType[], language: "vi"|"en", difficulty: "easy"|"medium"|"hard" }` và `parseGenerateInput(body)`. Hàm này kiểm tra: topic dài 3–`AI_TOPIC_MAX`, count từ 1 đến `AI_MAX_QUESTIONS`, types là tập con khác rỗng của `QUESTION_TYPES`. Sai thì báo lỗi `bad_request` / `topic_required`.
+- `buildQuizSchema(count, types)`: JSON Schema, chỉ dùng các keyword Gemini hỗ trợ (`type`, `enum`, `required`, `minItems`, `maxItems`, `description`). Khuôn dữ liệu đơn giản hơn kiểu nội bộ, để AI dễ làm đúng:
+  `{ title, description, questions: [{ type, prompt, options: [{text, isCorrect}], trueFalseAnswer: boolean, acceptedAnswers: string[] }] }`
+- `buildPrompt(input)`: system instruction quy định:
+  - Viết bằng ngôn ngữ đã chọn, đúng độ khó, chia đều các loại câu được chọn.
+  - Câu hỏi ≤200 ký tự, đáp án ≤60 ký tự (giới hạn hệ thống lần lượt là 300 và 90).
+  - `single`: 4 đáp án, đúng 1. `multi`: 4 đáp án, đúng 2–3. `true_false`: một mệnh đề và `trueFalseAnswer`. `text`: đáp án ngắn 1–3 từ, kèm 1–5 cách viết được chấp nhận.
+  - Nội dung chính xác, không mơ hồ, không trùng câu.
+  - Chủ đề người dùng nhập được đặt trong khối phân cách riêng và coi là dữ liệu, không phải lệnh.
+- `aiOutputToQuestions(raw, input, makeId)`: đổi kết quả AI sang `Question[]` nội bộ.
+  - Gán id ngẫu nhiên, để câu thêm vào editor không trùng id với câu cũ.
+  - `true_false` dùng `trueFalseOptions()` có sẵn trong [lib/game/validate.ts](lib/game/validate.ts).
+  - Thời gian trả lời: 20 giây cho `single`/`true_false`, 30 giây cho `multi`/`text`. `pointsMultiplier` = 1.
+  - **Bỏ hẳn câu sai luật** thay vì "sửa" (ví dụ câu `single` có 2 đáp án đúng; nếu giữ đáp án đầu thì có thể giữ nhầm đáp án sai). Sau đó cho chạy qua `sanitizeQuiz()` và `findQuizProblems()` có sẵn để cắt độ dài và lọc lần cuối. Trả về số câu sinh được so với số câu yêu cầu.
+
+#### `lib/server/gemini.ts` (mới, `server-only`)
+- `generateJson(systemInstruction, userText, schema)`: gọi model chính; nếu bị 429/503/404 thì thử lại một lần với model dự phòng. Timeout khoảng 50 giây bằng `AbortSignal.timeout`.
+- Lỗi đổi thành `HttpError` để client dịch theo mã lỗi như các API khác:
+  - Thiếu key → 503 `ai_not_configured`.
+  - Hết hạn mức → 429 `ai_rate_limited`.
+  - Lỗi khác hoặc nội dung bị chặn → 502 `ai_failed`.
+
+#### `app/api/quizzes/generate/route.ts` (mới)
+- `export const maxDuration = 60` (theo `node_modules/next/dist/docs/.../route-segment-config/maxDuration.md`). Segment tĩnh `generate` được ưu tiên hơn `[id]`.
+- `POST`: chạy `requireSuperadmin` → `parseGenerateInput` → `generateJson` → `aiOutputToQuestions`. Không có câu hợp lệ nào thì trả 502 `ai_empty`.
+  - **Không có `quizId`:** insert vào `quizzes` (`title`, `description`, `questions`, `owner_id`, `owner_email`) giống `POST /api/quizzes`. `question_count` là cột generated nên không cần migration. Trả `{ id, generated, requested }`.
+  - **Có `quizId`:** kiểm tra bằng `getOwnedQuiz` rồi trả `{ title, description, questions, generated, requested }`, không ghi DB. Editor tự gộp và autosave.
+- Dùng lại `handle`, `json`, `readJson`, `check` trong [lib/server/http.ts](lib/server/http.ts), và `getAdminClient`, `imageUrlPrefix` trong [lib/server/supabase.ts](lib/server/supabase.ts).
+
+#### `lib/config.ts`
+Thêm `AI_MAX_QUESTIONS = 30` và `AI_TOPIC_MAX = 300`.
+
+#### UI: `components/ai/AiGenerateDialog.tsx` (mới, phong cách sticker)
+- Dùng thẻ `<dialog>` gốc (`showModal()`) vì [components/ui.tsx](components/ui.tsx) chưa có modal. Viền ink 3px, `shadow-hard`, các primitive `Button`, `Tag`, `inputClass`, `labelClass`, `ErrorBanner`, `Spinner`.
+- Các trường:
+  - Chủ đề (textarea).
+  - Số câu: nút chọn nhanh 5/10/15/20 cộng ô nhập số, tối đa 30.
+  - Loại câu: pill chọn nhiều, tô màu theo `TYPE_TONE`, mặc định "Một đáp án".
+  - Độ khó: Dễ / Vừa / Khó.
+  - Ngôn ngữ: VI/EN, mặc định theo ngôn ngữ đang dùng trên UI.
+- Nút "✨ Sinh câu hỏi". Khi đang chạy thì hiện spinner và dòng "thường mất 10–30 giây", đồng thời khóa form.
+- Props: `mode: "create" | "append"`, `quizId?`, `onAppend?(result)`.
+  - `create`: gọi `authApi("/api/quizzes/generate")` rồi `router.push("/quiz/{id}/edit")`.
+  - `append`: gọi `onAppend`.
+
+#### Gắn vào trang
+- [components/home/MyQuizzesClient.tsx](components/home/MyQuizzesClient.tsx): nút secondary "✨ Tạo quiz bằng AI" cạnh nút "+ Tạo quiz mới", chỉ hiện khi `user?.isSuperadmin`.
+- [components/editor/EditorClient.tsx](components/editor/EditorClient.tsx): nút "✨ Thêm câu hỏi bằng AI" ngay dưới nút "+ Thêm câu hỏi" ở sidebar, chỉ hiện với superadmin (lấy `useAuth()`). `onAppend` làm như sau:
+  - Nếu quiz chỉ có một câu trống mặc định thì thay câu đó, còn không thì nối vào cuối. Cắt bớt cho không vượt `LIMITS.questionsMax`.
+  - Nếu tiêu đề hoặc mô tả đang trống thì điền từ kết quả AI.
+  - Gọi `update()` để đánh dấu có thay đổi và để autosave lưu, rồi chọn câu đầu tiên mới thêm.
+  - Nếu số câu sinh được ít hơn số câu yêu cầu thì báo "Đã thêm 9/10 câu".
+
+#### i18n ([lib/i18n/vi.ts](lib/i18n/vi.ts) là nguồn chuẩn, [lib/i18n/en.ts](lib/i18n/en.ts) phải khớp kiểu)
+- Thêm nhóm `ai.*` cho nhãn nút, các trường, độ khó, dòng chờ và thông báo kết quả.
+- Thêm các mã lỗi vào `errors.*`: `ai_not_configured`, `ai_rate_limited` ("Hết lượt sinh AI miễn phí, thử lại sau ít phút hoặc ngày mai"), `ai_failed`, `ai_empty`, `topic_required`.
+
+#### Health check
+[app/api/health/route.ts](app/api/health/route.ts): thêm `env.geminiKey` có giá trị `"configured"` hoặc `"missing"`. Không gọi Gemini ở đây để khỏi tốn hạn mức.
+
+#### Ghi plan vào dự án
+Sau khi bạn duyệt, nối plan này thành một mục mới ở cuối `.claude/PLAN.md` và giữ nguyên plan cũ.
+
+### Kiểm tra
+1. **Unit test** (`tests/ai-quiz.test.ts`, Vitest) cho `aiOutputToQuestions` và `parseGenerateInput`:
+   - true/false đổi đúng thành id `"true"`/`"false"`.
+   - Bỏ câu `single` có 0 hoặc 2 đáp án đúng, câu `text` không có đáp án chấp nhận, câu thiếu nội dung.
+   - Cắt bớt khi AI trả về nhiều câu hơn yêu cầu; id không trùng nhau.
+   - Từ chối input sai (count = 0 hoặc 31, topic rỗng, type lạ).
+   - Lệnh: `npm test`.
+2. `npm run typecheck` và `npm run lint`.
+3. **Thử tay** (`npm run dev`, đặt `GEMINI_API_KEY` trong `.env.local`):
+   - Đăng nhập superadmin, tạo quiz AI "Lịch sử Việt Nam", 10 câu, đủ 4 loại câu. Kiểm tra: trang soạn quiz mở ra, không có cảnh báo lỗi khi bấm "Chơi ngay", chơi thử được một ván.
+   - Trong editor, thêm 5 câu AI vào quiz có sẵn. Kiểm tra: câu được nối vào cuối và autosave lưu.
+   - Đăng nhập tài khoản thường. Kiểm tra: không thấy nút AI, gọi API trực tiếp nhận 403.
+   - Xóa key. Kiểm tra: UI báo `ai_not_configured` và `/api/health` hiện `geminiKey: "missing"`.
+4. **Trên Vercel:** đặt các biến môi trường, deploy preview, sinh thử 20 câu và kiểm tra thời gian phản hồi nằm trong `maxDuration`.

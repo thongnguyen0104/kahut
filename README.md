@@ -8,6 +8,7 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
   - Mỗi quiz có thể có một bài nhạc nền, lặp lại ở phòng chờ và trong lúc trả lời.
   - Mỗi câu hỏi có thể có nhạc riêng, phát thay nhạc nền từ lúc mở trả lời (hợp với câu kiểu "nghe nhạc đoán bài").
   - Nhạc phát trên màn hình host và trên điện thoại người chơi. Mỗi máy có nút tắt/bật tiếng.
+- **Sinh quiz bằng AI (Gemini)**, chỉ superadmin: nhập chủ đề, số câu (tối đa 30 mỗi lần), loại câu, độ khó và ngôn ngữ. Dùng được để tạo quiz mới (trang "Quiz của tôi") hoặc thêm câu vào quiz đang sửa. Server bỏ những câu AI soạn sai luật; người soạn vẫn nên xem lại trước khi chơi. Cần `GEMINI_API_KEY`; key gói free của Google AI Studio là đủ.
 - **Tài khoản:** chỉ tài khoản đã đăng nhập mới tạo và sửa được quiz, và chỉ sửa được quiz của mình. **Superadmin** xem được mọi quiz và cấp, xóa tài khoản, đặt lại mật khẩu ở `/admin/users`. Không có tự đăng ký. Người chơi **không cần tài khoản**, chỉ cần mã PIN.
 - Giao diện song ngữ Việt/Anh.
 
@@ -20,6 +21,7 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
 | Tài khoản | **Supabase Auth** (email + mật khẩu). Vai trò lưu ở `app_metadata.role` (`user` / `superadmin`) |
 | Realtime | **Supabase Realtime Broadcast + Presence** (kênh `game:{pin}`) |
 | Ảnh | **Supabase Storage**, bucket public `quiz-images`, upload qua signed URL |
+| Sinh quiz bằng AI | **Gemini API** qua `@google/genai`, structured output theo JSON Schema (`lib/ai/quizGen.ts`, `lib/server/gemini.ts`) |
 
 Trình duyệt giữ phiên đăng nhập Supabase và gửi access token tới API (`Authorization: Bearer`). Server xác minh token với Supabase Auth trên mỗi request rồi mới kiểm tra quyền sở hữu quiz và vai trò.
 
@@ -70,7 +72,7 @@ Thử với điện thoại cùng mạng wifi: đặt `NEXT_PUBLIC_SITE_URL=http
 ## Kiểm tra
 
 ```bash
-npm test             # unit test: chấm điểm, chuẩn hóa, luật chuyển trạng thái, dựng state
+npm test             # unit test: chấm điểm, chuẩn hóa, luật chuyển trạng thái, dựng state, chuyển đổi quiz AI
 npm run typecheck
 npm run lint
 # E2E tự động: đăng nhập, tạo quiz, 30 bot chơi hết game, đối chiếu điểm, xóa quiz test
@@ -84,7 +86,7 @@ Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok":
 ## Deploy lên Vercel
 
 1. Đẩy code lên GitHub, rồi *Import Project* trên Vercel (framework Next.js tự nhận).
-2. Thêm biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (tùy chọn: `MAX_PLAYERS`).
+2. Thêm biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (tùy chọn: `MAX_PLAYERS`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`).
 3. Deploy. `vercel.json` đặt functions ở `sin1` (Singapore), gần Supabase `ap-southeast-1`.
 
 **Thiết lập tài khoản trên Supabase cloud** (một lần):
@@ -106,3 +108,9 @@ Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok":
 - Xóa một tài khoản không xóa quiz của tài khoản đó. Quiz còn lại và chỉ superadmin xem được (hiện là "Người tạo").
 - Superadmin không tự xóa mình hay tự bỏ quyền superadmin được, để tránh khóa luôn hệ thống.
 - Đổi tên app: sửa `APP_NAME` trong `lib/config.ts`.
+- **Sinh quiz bằng AI:**
+  - Mỗi lần bấm "Sinh câu hỏi" là 1 request Gemini.
+  - Hạn mức gói free tính chung cho cả Google project và reset lúc 0h giờ Pacific. Xem số chính xác ở trang rate limit trong AI Studio.
+  - Mặc định dùng `gemini-3.8-flash`. Khi model này hết lượt hoặc quá tải thì tự chuyển sang `gemini-3.5-flash-lite`. Đổi model bằng `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`.
+  - Ở gói free, Google có thể dùng nội dung gửi lên để cải thiện sản phẩm. Đừng nhập thông tin nhạy cảm vào chủ đề.
+  - `GEMINI_API_KEY` là khóa bí mật, không thêm tiền tố `NEXT_PUBLIC_`. `/api/health` chỉ báo key đã đặt hay chưa, không gọi Gemini.

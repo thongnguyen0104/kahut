@@ -47,3 +47,10 @@ export const IMAGE_MIME_TYPES = [
 /** Background music and per-question clips (.mp3), stored in the same bucket as images. */
 export const AUDIO_MAX_BYTES = 8 * 1024 * 1024;
 export const AUDIO_MIME_TYPE = "audio/mpeg";
+
+/** AI quiz generation (Gemini): one request per batch, so keep batches modest. */
+export const AI_MAX_QUESTIONS = 30;
+export const AI_TOPIC_MIN = 3;
+export const AI_TOPIC_MAX = 300;
+export const AI_DIFFICULTIES = ["easy", "medium", "hard"] as const;
+export const AI_LANGUAGES = ["vi", "en"] as const;

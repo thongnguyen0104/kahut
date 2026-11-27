@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { IMAGE_BUCKET } from "@/lib/config";
+import { geminiConfigured } from "@/lib/server/gemini";
 import { getAdminClient } from "@/lib/server/supabase";
 import { normalizeSupabaseUrl } from "@/lib/supabaseUrl";
 
@@ -46,6 +47,8 @@ export async function GET() {
     supabaseUrl: describeUrl(process.env.NEXT_PUBLIC_SUPABASE_URL),
     anonKey: describeKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     serviceRoleKey: describeKey(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    // Optional (AI quiz generation). Not called here, to save the free daily quota.
+    geminiKey: geminiConfigured() ? "configured" : "missing (AI quiz generation off)",
   };
 
   const [db, storage, realtime] = await Promise.all([

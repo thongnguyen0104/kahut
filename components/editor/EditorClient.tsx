@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Spinner, Tag, buttonClass, inputBase, inputClass, labelClass } from "@/components/ui";
+import { AiGenerateDialog, type AiAppendResult } from "@/components/ai/AiGenerateDialog";
+import { Button, Card, ErrorBanner, FullPageSpinner, LanguageToggle, Logo, Notice, Spinner, Tag, buttonClass, inputBase, inputClass, labelClass } from "@/components/ui";
 import { errorCode } from "@/lib/client/api";
-import { authApi, useRequireAuth } from "@/lib/client/auth";
+import { authApi, useAuth, useRequireAuth } from "@/lib/client/auth";
 import { saveHostSession } from "@/lib/client/storage";
 import { LIMITS } from "@/lib/config";
 import type { Question, Quiz, QuizContent } from "@/lib/game/types";
@@ -16,6 +17,17 @@ import { ImageField } from "./ImageField";
 import { QuestionEditor, TYPE_TONE, newQuestion, randomId } from "./QuestionEditor";
 
 const AUTOSAVE_MS = 1500;
+
+/** The untouched question a new quiz starts with; AI questions replace it instead of following it. */
+function isBlankQuestion(q: Question): boolean {
+  return (
+    !q.prompt.trim() &&
+    !q.imageUrl &&
+    !q.audioUrl &&
+    q.acceptedAnswers.length === 0 &&
+    q.options.every((o) => !o.text.trim() && !o.isCorrect)
+  );
+}
 
 export default function EditorClient() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +49,9 @@ function Editor({ id }: { id: string }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProblems, setShowProblems] = useState(false);
+  const { user } = useAuth();
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
 
   const version = useRef(0);
   const savingRef = useRef(false);
@@ -145,6 +160,28 @@ function Editor({ id }: { id: string }) {
     if (!quiz || quiz.questions.length >= LIMITS.questionsMax) return;
     update((q) => ({ ...q, questions: [...q.questions, newQuestion()] }));
     setSelected(quiz.questions.length);
+  }
+
+  // A lone blank starter question gets replaced by AI questions rather than kept in front of them.
+  const replaceBlank = quiz.questions.length === 1 && isBlankQuestion(quiz.questions[0]);
+  const keptCount = replaceBlank ? 0 : quiz.questions.length;
+  const aiRoom = LIMITS.questionsMax - keptCount;
+
+  function appendAiQuestions(res: AiAppendResult) {
+    const added = res.questions.slice(0, aiRoom);
+    if (added.length === 0) return;
+    update((q) => ({
+      ...q,
+      title: q.title.trim() ? q.title : res.title,
+      description: q.description.trim() ? q.description : res.description,
+      questions: [...(replaceBlank ? [] : q.questions), ...added],
+    }));
+    setSelected(keptCount);
+    setAiNotice(
+      added.length < res.requested
+        ? t("ai.addedPartial", { count: added.length, requested: res.requested })
+        : t("ai.added", { count: added.length }),
+    );
   }
 
   function duplicateQuestion(index: number) {
@@ -282,10 +319,35 @@ function Editor({ id }: { id: string }) {
           >
             + {t("editor.addQuestion")}
           </button>
+          {user?.isSuperadmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setAiNotice(null);
+                setAiOpen(true);
+              }}
+              disabled={aiRoom <= 0}
+              title={aiRoom <= 0 ? t("ai.full", { max: LIMITS.questionsMax }) : undefined}
+              className="press flex w-52 shrink-0 items-center justify-center gap-2 rounded-2xl border-3 border-ink bg-lilac py-4 font-display font-extrabold shadow-hard-sm disabled:opacity-40 md:w-auto"
+            >
+              ✦ {t("ai.appendButton")}
+            </button>
+          )}
         </aside>
+
+        {aiOpen && (
+          <AiGenerateDialog
+            mode="append"
+            quizId={id}
+            maxCount={aiRoom}
+            onAppend={appendAiQuestions}
+            onClose={() => setAiOpen(false)}
+          />
+        )}
 
         <main className="flex min-w-0 flex-col gap-5">
           {showProblems && problems.length > 0 && <ProblemList problems={problems} onPick={setSelected} />}
+          <Notice>{aiNotice}</Notice>
           <ErrorBanner>{errorText(error)}</ErrorBanner>
 
           {selected === -1 && (

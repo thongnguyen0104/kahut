@@ -81,7 +81,7 @@ const POINTS = [
 ] as const;
 
 /** Row of small pill buttons — quicker than a dropdown for a handful of choices. */
-function Chips<T extends string | number>({
+export function Chips<T extends string | number>({
   value,
   options,
   onChange,
