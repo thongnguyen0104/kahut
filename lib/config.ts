@@ -48,6 +48,19 @@ export const IMAGE_MIME_TYPES = [
 export const AUDIO_MAX_BYTES = 8 * 1024 * 1024;
 export const AUDIO_MIME_TYPE = "audio/mpeg";
 
+/**
+ * Gemini models for AI quiz generation, tried in order: the first is the main model, the
+ * rest are fallbacks used when one fails (quota, overload, timeout, unknown model…).
+ * Override without a code change with env GEMINI_MODELS="model-a,model-b,…".
+ * Free tier, 30 questions (2026-11-28): 3.1-flash-lite ~6s, 3.5-flash-lite ~7s,
+ * 3.5-flash ~22s, 3.6-flash ~29s, 3.8-flash ~2min (too slow); 2.5-flash-lite closed to new users.
+ */
+export const AI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"] as const;
+/** Whole generate request, all models included (the route's maxDuration is 60s). */
+export const AI_TIMEOUT_MS = 50_000;
+/** Cap per model when more models follow, so one hanging model can't use up the whole budget. */
+export const AI_ATTEMPT_TIMEOUT_MS = 30_000;
+
 /** AI quiz generation (Gemini): one request per batch, so keep batches modest. */
 export const AI_MAX_QUESTIONS = 30;
 export const AI_TOPIC_MIN = 3;

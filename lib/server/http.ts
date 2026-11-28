@@ -1,12 +1,17 @@
 import "server-only";
+import { unstable_rethrow } from "next/navigation";
 
-/** Error codes are translated on the client (messages.errors.*). */
+/**
+ * Error codes are translated on the client (messages.errors.*). `detail` is technical,
+ * untranslated text sent along with the code: only use it on superadmin-only routes.
+ */
 export class HttpError extends Error {
   constructor(
     public status: number,
     public code: string,
+    public detail?: string,
   ) {
-    super(code);
+    super(detail ? `${code}: ${detail}` : code);
   }
 }
 
@@ -19,7 +24,11 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
   try {
     return await fn();
   } catch (err) {
-    if (err instanceof HttpError) return json({ error: err.code }, err.status);
+    // Next's own control-flow errors (e.g. the build's prerender bailout on req.headers).
+    unstable_rethrow(err);
+    if (err instanceof HttpError) {
+      return json(err.detail ? { error: err.code, detail: err.detail } : { error: err.code }, err.status);
+    }
     console.error(err);
     return json({ error: "server_error" }, 500);
   }

@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Chips, TYPE_TONE } from "@/components/editor/QuestionEditor";
 import { Button, ErrorBanner, Spinner, Tag, inputBase, inputClass, labelClass } from "@/components/ui";
 import type { AiDifficulty, AiLanguage } from "@/lib/ai/quizGen";
-import { errorCode } from "@/lib/client/api";
-import { authApi } from "@/lib/client/auth";
+import { errorCode, errorDetail } from "@/lib/client/api";
+import { authApi, useAuth } from "@/lib/client/auth";
 import { AI_DIFFICULTIES, AI_MAX_QUESTIONS, AI_TOPIC_MAX, AI_TOPIC_MIN } from "@/lib/config";
 import { QUESTION_TYPES, type Question, type QuestionType } from "@/lib/game/types";
 import { useErrorText, useI18n } from "@/lib/i18n/I18nProvider";
@@ -51,6 +52,8 @@ export function AiGenerateDialog(props: Props) {
   const [language, setLanguage] = useState<AiLanguage>(locale);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
+  const isSuperadmin = useAuth().user?.isSuperadmin === true;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -74,11 +77,13 @@ export function AiGenerateDialog(props: Props) {
     e.preventDefault();
     if (topic.trim().length < AI_TOPIC_MIN) {
       setError("topic_required");
+      setDetail(null);
       return;
     }
     if (!countValid) return;
     setBusy(true);
     setError(null);
+    setDetail(null);
     const body = {
       topic,
       count,
@@ -98,6 +103,7 @@ export function AiGenerateDialog(props: Props) {
       }
     } catch (err) {
       setError(errorCode(err));
+      setDetail(errorDetail(err));
       setBusy(false);
     }
   }
@@ -215,6 +221,21 @@ export function AiGenerateDialog(props: Props) {
 
         <p className="text-xs font-medium text-ink-soft">{t("ai.privacyHint")}</p>
         <ErrorBanner>{errorText(error)}</ErrorBanner>
+        {error && detail && isSuperadmin && (
+          <div className="flex flex-col gap-2 rounded-xl border-2 border-dashed border-ink/50 bg-white p-3">
+            <span className="text-[11px] font-extrabold uppercase tracking-wide text-ink-soft">
+              {t("ai.errorDetail")} · {error}
+            </span>
+            <code className="whitespace-pre-wrap wrap-break-word font-mono text-xs leading-relaxed">{detail}</code>
+            <Link
+              href="/admin/ai-logs"
+              target="_blank"
+              className="self-start font-display text-sm font-extrabold underline decoration-2 underline-offset-2"
+            >
+              {t("ai.viewLogs")} ↗
+            </Link>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t-3 border-dashed border-ink/25 pt-5">
           {busy && (

@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     public status: number,
+    /** Technical detail; the server only sends it on superadmin-only routes. */
+    public detail?: string,
   ) {
     super(code);
   }
@@ -36,7 +38,11 @@ export async function api<T>(path: string, { method = "GET", body, token }: ApiO
 
   const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
   if (!res.ok) {
-    throw new ApiError(typeof data?.error === "string" ? data.error : "server_error", res.status);
+    throw new ApiError(
+      typeof data?.error === "string" ? data.error : "server_error",
+      res.status,
+      typeof data?.detail === "string" ? data.detail : undefined,
+    );
   }
 
   const view = data?.view as { serverNow?: unknown } | undefined;
@@ -53,4 +59,8 @@ export function cleanPin(value: string): string {
 
 export function errorCode(err: unknown): string {
   return err instanceof ApiError ? err.code : "server_error";
+}
+
+export function errorDetail(err: unknown): string | null {
+  return err instanceof ApiError ? (err.detail ?? null) : null;
 }

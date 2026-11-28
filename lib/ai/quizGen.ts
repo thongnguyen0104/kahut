@@ -32,6 +32,8 @@ export interface GeneratedQuiz {
   title: string;
   description: string;
   questions: Question[];
+  /** Questions in the model's answer before validation (for the log). */
+  received: number;
 }
 
 /* ------------------------------------------------------------- input */
@@ -61,7 +63,12 @@ export function parseGenerateInput(
 
 /* ------------------------------------------------------------- request to the model */
 
-/** Response shape for Gemini structured output. Simpler than our own Question type on purpose. */
+/**
+ * Response shape for Gemini structured output. Simpler than our own Question type on purpose.
+ * No minItems/maxItems anywhere: array length bounds (worst when nested, e.g. 30 questions ×
+ * 4 options) make Gemini reject the schema with 400 "too many states". The count lives in
+ * the prompt and aiOutputToQuiz trims the extras.
+ */
 export function buildQuizSchema(input: GenerateInput): Record<string, unknown> {
   return {
     type: "object",
@@ -70,8 +77,7 @@ export function buildQuizSchema(input: GenerateInput): Record<string, unknown> {
       description: { type: "string", description: "One sentence describing the quiz." },
       questions: {
         type: "array",
-        minItems: input.count,
-        maxItems: input.count,
+        description: `Exactly ${input.count} questions.`,
         items: {
           type: "object",
           properties: {
@@ -79,7 +85,6 @@ export function buildQuizSchema(input: GenerateInput): Record<string, unknown> {
             prompt: { type: "string", description: "The question, or for true_false a statement." },
             options: {
               type: "array",
-              maxItems: LIMITS.maxOptions,
               description: "single and multi: exactly 4 options. Empty for true_false and text.",
               items: {
                 type: "object",
@@ -96,8 +101,7 @@ export function buildQuizSchema(input: GenerateInput): Record<string, unknown> {
             },
             acceptedAnswers: {
               type: "array",
-              maxItems: LIMITS.acceptedAnswersMax,
-              description: "text only: accepted spellings of the short answer. Empty for other types.",
+              description: "text only: 1–5 accepted spellings of the short answer. Empty for other types.",
               items: { type: "string" },
             },
           },
@@ -225,6 +229,7 @@ export function aiOutputToQuiz(
   makeId: () => string = randomShortId,
 ): GeneratedQuiz {
   const body = record(raw);
+  const received = list(body.questions).length;
   const prompts = new Set<string>();
   const questions: Question[] = [];
   for (const rq of list(body.questions)) {
@@ -243,11 +248,12 @@ export function aiOutputToQuiz(
     { title, description: text(body.description), coverImageUrl: null, musicUrl: null, questions },
     null,
   );
-  if (!content) return { title: "", description: "", questions: [] };
+  if (!content) return { title: "", description: "", questions: [], received };
   const broken = new Set(findQuizProblems(content).map((p) => p.questionIndex));
   return {
     title: content.title,
     description: content.description,
     questions: content.questions.filter((_, i) => !broken.has(i)),
+    received,
   };
 }

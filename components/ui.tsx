@@ -229,9 +229,14 @@ export function UserMenu() {
   return (
     <div className="flex items-center gap-1">
       {user.isSuperadmin && (
-        <Link href="/admin/users" className={buttonClass("ghost", "sm", "hidden md:inline-flex")}>
-          {t("auth.manageUsers")}
-        </Link>
+        <>
+          <Link href="/admin/users" className={buttonClass("ghost", "sm", "hidden md:inline-flex")}>
+            {t("auth.manageUsers")}
+          </Link>
+          <Link href="/admin/ai-logs" className={buttonClass("ghost", "sm", "hidden md:inline-flex")}>
+            {t("auth.aiLogs")}
+          </Link>
+        </>
       )}
       <Link
         href="/account"

@@ -8,7 +8,7 @@ Web game đố vui thời gian thực, cùng thể loại với Kahoot. Host chi
   - Mỗi quiz có thể có một bài nhạc nền, lặp lại ở phòng chờ và trong lúc trả lời.
   - Mỗi câu hỏi có thể có nhạc riêng, phát thay nhạc nền từ lúc mở trả lời (hợp với câu kiểu "nghe nhạc đoán bài").
   - Nhạc phát trên màn hình host và trên điện thoại người chơi. Mỗi máy có nút tắt/bật tiếng.
-- **Sinh quiz bằng AI (Gemini)**, chỉ superadmin: nhập chủ đề, số câu (tối đa 30 mỗi lần), loại câu, độ khó và ngôn ngữ. Dùng được để tạo quiz mới (trang "Quiz của tôi") hoặc thêm câu vào quiz đang sửa. Server bỏ những câu AI soạn sai luật; người soạn vẫn nên xem lại trước khi chơi. Cần `GEMINI_API_KEY`; key gói free của Google AI Studio là đủ.
+- **Sinh quiz bằng AI (Gemini)**, chỉ superadmin: nhập chủ đề, số câu (tối đa 30 mỗi lần), loại câu, độ khó và ngôn ngữ. Dùng được để tạo quiz mới (trang "Quiz của tôi") hoặc thêm câu vào quiz đang sửa. Server bỏ những câu AI soạn sai luật; người soạn vẫn nên xem lại trước khi chơi. Cần `GEMINI_API_KEY`; key gói free của Google AI Studio là đủ. Mọi lượt sinh được ghi log ở `/admin/ai-logs`.
 - **Tài khoản:** chỉ tài khoản đã đăng nhập mới tạo và sửa được quiz, và chỉ sửa được quiz của mình. **Superadmin** xem được mọi quiz và cấp, xóa tài khoản, đặt lại mật khẩu ở `/admin/users`. Không có tự đăng ký. Người chơi **không cần tài khoản**, chỉ cần mã PIN.
 - Giao diện song ngữ Việt/Anh.
 
@@ -86,7 +86,7 @@ Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok":
 ## Deploy lên Vercel
 
 1. Đẩy code lên GitHub, rồi *Import Project* trên Vercel (framework Next.js tự nhận).
-2. Thêm biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (tùy chọn: `MAX_PLAYERS`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`).
+2. Thêm biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (tùy chọn: `MAX_PLAYERS`, `GEMINI_API_KEY`, `GEMINI_MODELS`).
 3. Deploy. `vercel.json` đặt functions ở `sin1` (Singapore), gần Supabase `ap-southeast-1`.
 
 **Thiết lập tài khoản trên Supabase cloud** (một lần):
@@ -111,6 +111,10 @@ Kiểm tra nhanh một bản deploy: mở `/api/health`. Bản khỏe có `"ok":
 - **Sinh quiz bằng AI:**
   - Mỗi lần bấm "Sinh câu hỏi" là 1 request Gemini.
   - Hạn mức gói free tính chung cho cả Google project và reset lúc 0h giờ Pacific. Xem số chính xác ở trang rate limit trong AI Studio.
-  - Mặc định dùng `gemini-3.8-flash`. Khi model này hết lượt hoặc quá tải thì tự chuyển sang `gemini-3.5-flash-lite`. Đổi model bằng `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`.
+  - **Chọn model:** danh sách `AI_MODELS` trong `lib/config.ts`, thử lần lượt từ trên xuống. Model đầu là model chính, các model sau là dự phòng khi model trước lỗi (hết lượt, quá tải, quá giờ, không tồn tại…). Mặc định: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-3.5-flash`.
+    - Muốn đổi mà không sửa code: đặt `GEMINI_MODELS=model-a,model-b,…` trên Vercel rồi redeploy. Danh sách đang dùng hiện ở `/admin/ai-logs` và `/api/health`.
+    - Mỗi model dự phòng được chờ tối đa 30 giây, cả request tối đa 50 giây (`AI_ATTEMPT_TIMEOUT_MS`, `AI_TIMEOUT_MS`).
+    - Đo ngày 28/11/2026, gói free, 30 câu: `gemini-3.1-flash-lite` khoảng 6 giây, `gemini-3.5-flash-lite` khoảng 7 giây, `gemini-3.5-flash` khoảng 22 giây, `gemini-3.6-flash` khoảng 29 giây. `gemini-3.8-flash` mất khoảng 2 phút nên không dùng được. `gemini-2.5-flash-lite` không còn mở cho key mới.
+  - **Log:** superadmin xem mọi lượt sinh (thành công và lỗi, từng lần gọi model, thời gian, token) ở `/admin/ai-logs`. Khi lỗi, hộp thoại sinh câu hỏi cũng hiện chi tiết kỹ thuật cho superadmin. Log nằm trong bảng `ai_logs` (migration `20261128120000_ai_logs.sql`) và tự xóa sau 30 ngày.
   - Ở gói free, Google có thể dùng nội dung gửi lên để cải thiện sản phẩm. Đừng nhập thông tin nhạy cảm vào chủ đề.
   - `GEMINI_API_KEY` là khóa bí mật, không thêm tiền tố `NEXT_PUBLIC_`. `/api/health` chỉ báo key đã đặt hay chưa, không gọi Gemini.
