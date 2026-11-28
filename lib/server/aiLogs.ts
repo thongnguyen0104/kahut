@@ -75,6 +75,10 @@ export async function writeAiLog(entry: AiLogEntry): Promise<void> {
   }
 }
 
+function describeDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }): string {
+  return [error.code, error.message, error.details, error.hint && `hint: ${error.hint}`].filter(Boolean).join(" — ");
+}
+
 /** Newest first. `onlyErrors` keeps failed requests only. */
 export async function listAiLogs(limit: number, onlyErrors: boolean): Promise<AiLogView[]> {
   let query = getAdminClient()
@@ -92,7 +96,9 @@ export async function listAiLogs(limit: number, onlyErrors: boolean): Promise<Ai
     if (error.code === "PGRST205" || error.code === "42P01") {
       throw new HttpError(503, "ai_logs_missing", error.message);
     }
-    throw error;
+    // Superadmin-only caller: show the real database error instead of a bare server_error.
+    console.error("ai_logs select failed:", error);
+    throw new HttpError(500, "server_error", describeDbError(error));
   }
   return (data as AiLogRow[]).map((r) => ({
     id: r.id,
